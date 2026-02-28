@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.10`
+**Current version:** `v0.0.18`
 
 ---
 
@@ -15,7 +15,8 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 - **Recently added** — see what's been added to any library
 - **Playback sessions** — view active streams and kill them if needed
 - **Watchlist / Favorites** — track items you want to watch, export in multiple formats
-- **Discord notifications** — rich embeds sent to a webhook on key events
+- **Discord notifications** — rich embeds on startup, server switch, library list, version adds, and stream kills
+- **System info on startup** — OS version, external public IP, and active stream count sent to Discord automatically
 - **Version manager** — track your own changelog entries inside the app
 
 ---
@@ -69,7 +70,7 @@ Then edit `plex_servers.json` with your server details.
 ```
 ╔════════════════════════════════════════════════════╗
 ║         🎬  PLEX API MANAGER                       ║
-║         v0.0.10  ·  MyServer  ·  12 libraries      ║
+║         v0.0.18  ·  MyServer  ·  12 libraries      ║
 ╠════════════════════════════════════════════════════╣
 ║  [1]  List All Libraries                           ║
 ║  [2]  Search My Library with Totals                ║
@@ -89,8 +90,28 @@ Then edit `plex_servers.json` with your server details.
 
 ## Discord Notifications
 
-Set a webhook URL via **Menu → 7 → Discord Notification Settings**. Notifications fire on:
-- App startup / server switch
+Set a webhook URL via **Menu → 7 → Discord Notification Settings**.
+
+### Automatic (on startup)
+Every launch sends a Discord embed containing:
+- Plex server version and library count
+- Active stream count
+- Host OS version
+- External public IP (queried via ipify → ifconfig.me → ipecho.net)
+
+### Discord Settings Menu (option 7)
+
+```
+  [1]  Set / Update Webhook URL
+  [2]  Send Test Notification
+  [3]  Remove Webhook
+  [4]  Send System Info  (OS · IP · Active Streams)
+```
+
+Option `[4]` lets you fire a system info embed on demand at any time.
+
+### Other automatic triggers
+- Server switch
 - Library listings
 - Version entries added
 - Stream kills
@@ -113,6 +134,7 @@ plex_menu.py              # Main script — everything lives here
 plex_servers.example.json # Server config template
 versions.json             # Changelog / version history
 watchlist.json            # Saved watchlist items
+CLAUDE.md                 # Project context for Claude Code
 library_cache/            # Per-library metadata snapshots (gitignored)
 watchlist_exports/        # Exported watchlist files (gitignored)
 logs/plex.log             # Log file (gitignored)
@@ -124,7 +146,15 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
-| v0.0.10 | Add kill stream option |
+| v0.0.18 | Moved system info into Discord settings menu option 4, removed standalone py |
+| v0.0.17 | Added active stream count to Discord |
+| v0.0.16 | Show active stream count in startup Discord notification |
+| v0.0.15 | Created standalone system_info_notify.py |
+| v0.0.14 | Removed socket (no longer needed) |
+| v0.0.13 | OS & IP sent to Discord on startup |
+| v0.0.12 | External public IP lookup via ipify / ifconfig.me / ipecho.net |
+| v0.0.11 | OS detection at startup via platform module |
+| v0.0.10 | Add kill stream option in playback sessions |
 | v0.0.9 | Add smart diff (option 4) |
 | v0.0.8 | Add scan, search & scan library |
 | v0.0.7 | Add/change/delete servers |

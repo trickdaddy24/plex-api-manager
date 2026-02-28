@@ -15,6 +15,12 @@ watchlist_exports/
 # Old versions
 old/
 
+# Numbered backup copies of main script
+plex_menu.*.py
+
+# Claude internal
+.claude/
+
 # Python
 __pycache__/
 *.pyc
