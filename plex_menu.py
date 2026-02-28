@@ -2,6 +2,8 @@ import subprocess
 import sys
 import json
 import logging
+import platform
+import socket
 from datetime import datetime
 from pathlib import Path
 
@@ -73,6 +75,21 @@ def blue(t):                 return c(t, Fore.BLUE)
 def white(t):                return c(t, Fore.WHITE)
 def header(t):               return c(t, Fore.CYAN + Style.BRIGHT)
 def divider(char="═", n=52): return c(char * n, Fore.BLUE + Style.BRIGHT)
+
+# ─────────────────────────────────────────
+#  SYSTEM INFO
+# ─────────────────────────────────────────
+def get_system_info():
+    """Return OS name/version and local IP address."""
+    os_name    = platform.system()
+    os_release = platform.release()
+    os_version = platform.version()
+    os_str     = f"{os_name} {os_release} ({os_version})"
+    try:
+        ip = socket.gethostbyname(socket.gethostname())
+    except Exception:
+        ip = "Unknown"
+    return {"os": os_str, "ip": ip}
 
 # ─────────────────────────────────────────
 #  VERSION HELPERS
@@ -445,8 +462,14 @@ def startup_servers():
     log.info(f"Active server: {ACTIVE['name']} ({ACTIVE['url']}) | v{ACTIVE['version']} | {ACTIVE['lib_count']} libs | App v{app_ver}")
     print(green(f"  ✅ Connected to {cyan(ACTIVE['name'])}"))
     print(f"     {white('Server:')} {blue(ACTIVE['version'])}  {white('Libraries:')} {magenta(str(ACTIVE['lib_count']))}  {white('App:')} {cyan('v'+app_ver)}\n")
+    sysinfo = get_system_info()
+    log.info(f"System: {sysinfo['os']} | IP: {sysinfo['ip']}")
     notify_discord(
-        f"✅ Connected successfully\n\n📡 Server version: `{ACTIVE['version']}`\n📚 Libraries: `{ACTIVE['lib_count']}`",
+        f"✅ Connected successfully\n\n"
+        f"📡 Server version: `{ACTIVE['version']}`\n"
+        f"📚 Libraries: `{ACTIVE['lib_count']}`\n\n"
+        f"🖥️ OS: `{sysinfo['os']}`\n"
+        f"🌐 IP: `{sysinfo['ip']}`",
         title=f"🎬 Plex Manager Started — {ACTIVE['name']}",
         color=0x57F287
     )
