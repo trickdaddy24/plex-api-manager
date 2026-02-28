@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.22`
+**Current version:** `v0.0.23`
 
 ---
 
@@ -32,28 +32,19 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 
 ## Install
 
-### Option A — Ubuntu server (private repo via token)
+### Option A — Ubuntu server (one-liner)
 
-**1. Generate a GitHub personal access token**
-GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-Give it `Contents: Read-only` access to this repo.
-
-**2. Clone and install on the server**
 ```bash
-git clone https://<YOUR_TOKEN>@github.com/trickdaddy24/plex-api-manager.git
-cd plex-api-manager
-bash install.sh
+bash <(curl -sL https://raw.githubusercontent.com/trickdaddy24/plex-api-manager/main/install.sh)
 ```
 
-After install, three commands are available globally:
+This will install Python deps, register three global commands, create `~/.plex-manager/`, and copy the server config template.
 
 ```bash
 plex-manager      # interactive menu
 plex-heartbeat    # send system info to Discord now
 plex-scheduler    # manage daily heartbeat schedule
 ```
-
-Config and data files are stored in `~/.plex-manager/`.
 
 ### Option B — Git clone (Windows / local dev)
 
@@ -191,6 +182,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.23 | Make repo public, restore curl one-liner install |
 | v0.0.22 | Fix install.sh for private repo — local clone install, copies example config from repo |
 | v0.0.21 | pip installable via pyproject.toml + install.sh, smart BASE_DIR, main() entry points |
 | v0.0.20 | Add heartbeat_scheduler.py — cross-platform daily scheduling, random time 00:00–11:59 |

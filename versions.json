@@ -108,5 +108,10 @@
     "version": "0.0.22",
     "date": "2026-02-28",
     "notes": "fix install.sh for private repo — installs from local clone instead of raw curl, copies example config from repo"
+  },
+  {
+    "version": "0.0.23",
+    "date": "2026-02-28",
+    "notes": "make repo public, restore curl one-liner install in install.sh and README"
   }
 ]
