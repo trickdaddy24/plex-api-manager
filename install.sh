@@ -20,24 +20,21 @@ fi
 PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 echo "✅ Python $PY_VER found"
 
-# ── pip check ────────────────────────────────────────────────
-if ! command -v pip3 &>/dev/null; then
-    echo "📦 Installing pip3..."
+# ── pipx install (handles PEP 668 / Ubuntu 24.04+) ───────────
+# pipx installs CLI tools into isolated venvs — the correct
+# approach for modern Ubuntu which blocks pip install --user.
+if ! command -v pipx &>/dev/null; then
+    echo "📦 Installing pipx..."
     sudo apt-get update -qq
-    sudo apt-get install -y python3-pip
+    sudo apt-get install -y pipx
 fi
 
-# ── Install package from GitHub ──────────────────────────────
-echo "📦 Installing plex-api-manager from GitHub..."
-pip3 install --user --upgrade "git+$REPO"
+echo "📦 Installing plex-api-manager via pipx..."
+pipx install "git+$REPO" --force
 
-# ── Ensure PATH includes ~/.local/bin ────────────────────────
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    echo ""
-    echo "⚠️  Adding ~/.local/bin to PATH in ~/.bashrc"
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-    export PATH="$HOME/.local/bin:$PATH"
-fi
+# ── Ensure pipx bin dir is in PATH ────────────────────────────
+pipx ensurepath --quiet
+export PATH="$HOME/.local/bin:$PATH"
 
 # ── Config directory ─────────────────────────────────────────
 mkdir -p "$CONFIG_DIR"
@@ -66,6 +63,8 @@ echo "  plex-heartbeat  — send system info to Discord now"
 echo "  plex-scheduler  — manage the daily heartbeat schedule"
 echo ""
 echo "Config directory: $CONFIG_DIR"
+echo ""
+echo "⚠️  If commands are not found, run: source ~/.bashrc"
 echo ""
 echo "First-time setup:"
 echo "  1. Edit $CONFIG_DIR/plex_servers.json with your Plex URL and token"

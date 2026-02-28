@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.23`
+**Current version:** `v0.0.24`
 
 ---
 
@@ -182,6 +182,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.24 | Fix install.sh for Ubuntu 24.04 PEP 668 — switch from pip3 to pipx |
 | v0.0.23 | Make repo public, restore curl one-liner install |
 | v0.0.22 | Fix install.sh for private repo — local clone install, copies example config from repo |
 | v0.0.21 | pip installable via pyproject.toml + install.sh, smart BASE_DIR, main() entry points |

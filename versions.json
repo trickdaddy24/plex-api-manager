@@ -113,5 +113,10 @@
     "version": "0.0.23",
     "date": "2026-02-28",
     "notes": "make repo public, restore curl one-liner install in install.sh and README"
+  },
+  {
+    "version": "0.0.24",
+    "date": "2026-02-28",
+    "notes": "fix install.sh for Ubuntu 24.04 PEP 668 — switch from pip3 to pipx for isolated venv install"
   }
 ]
