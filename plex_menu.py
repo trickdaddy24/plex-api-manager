@@ -946,7 +946,8 @@ def search_cached_library(out_file, query):
         print(divider("-", 52))
         print(f"  {white('Add a movie to your Movie Search List?')}")
         for i, m in enumerate(movie_matches[:10], 1):
-            print(f"  {yellow(f'[{i}]')}  {white(m['title'])}  {blue(f'({m[\"year\"]})')}")
+            yr = m.get("year", "?")
+            print(f"  {yellow(f'[{i}]')}  {white(m['title'])}  {blue(f'({yr})')}")
         print(f"  {red('[0]')}  {white('Skip')}")
         sel = input(f"  {cyan('Select movie to add (or 0 to skip)')}: ").strip()
         if sel != "0" and sel.isdigit():
@@ -2389,7 +2390,8 @@ def movie_db_menu():
             display = matches[:20]
             print(f"\n{header('  🔍 DATABASE RESULTS')}\n" + divider("-", 52))
             for i, (tid, m) in enumerate(display, 1):
-                print(f"  {yellow(f'[{i}]')}  {white(m.get('title','?'))}  {blue(f'({m.get(\"year\",\"?\")})')}"
+                yr = m.get("year", "?")
+                print(f"  {yellow(f'[{i}]')}  {white(m.get('title','?'))}  {blue(f'({yr})')}"
                       f"  {yellow('IMDB:')} {m.get('imdb_rating','N/A')}  {green('RT:')} {m.get('rt_rating','N/A')}"
                       f"  {magenta(m.get('mpaa_rating','N/A'))}  {white(m.get('runtime','N/A'))}")
             print(f"  {red('[0]')}  {white('Cancel')}")
