@@ -73,6 +73,8 @@ UPDATE_FILES       = [
     "system_info_notify.py",
     "versions.json",
 ]
+UPDATE_PREFS_FILE  = BASE_DIR / "update_prefs.json"
+UPDATE_CHECK_TTL   = 3600   # seconds between automatic checks (1 hour)
 
 # ─────────────────────────────────────────
 #  LOGGING SETUP
@@ -361,6 +363,10 @@ def suggest_next_version():
 # ─────────────────────────────────────────
 #  SELF-UPDATE SYSTEM
 # ─────────────────────────────────────────
+# Holds the result of the startup update check so the main menu
+# banner stays visible each loop without re-fetching GitHub.
+_PENDING_UPDATE: dict | None = None
+
 def _version_tuple(v):
     """Convert '0.0.27' → (0, 0, 27) for comparison."""
     try:
@@ -377,40 +383,156 @@ def _detect_install_method():
         return "pip"
     return "raw"
 
-def check_for_updates(silent=False):
+# ── Update preferences ──────────────────────────────────────────────────────
+def load_update_prefs() -> dict:
+    """Load update_prefs.json; return safe defaults if missing or corrupt."""
+    defaults = {
+        "auto_check":       True,   # check GitHub on every startup (throttled)
+        "skipped_version":  None,   # version string the user chose to skip
+        "last_check":       None,   # ISO timestamp of last successful check
+    }
+    if UPDATE_PREFS_FILE.exists():
+        try:
+            with open(UPDATE_PREFS_FILE, encoding="utf-8") as f:
+                return {**defaults, **json.load(f)}
+        except Exception:
+            pass
+    return defaults
+
+def save_update_prefs(prefs: dict):
+    with open(UPDATE_PREFS_FILE, "w", encoding="utf-8") as f:
+        json.dump(prefs, f, indent=2)
+
+# ── Core check ─────────────────────────────────────────────────────────────
+def check_for_updates(silent: bool = False, force: bool = False) -> dict | None:
     """
-    Fetch versions.json from GitHub and compare to local version.
-    Returns dict with update info if update is available, else None.
+    Fetch versions.json from GitHub and compare to local.
+
+    Respects:
+      • auto_check toggle  (prefs)
+      • 1-hour cache       (prefs["last_check"])  — bypassed when force=True
+      • skipped_version    (prefs)                — bypassed when force=True
+
+    Returns a dict with update info when an actionable update exists, else None.
     """
+    prefs = load_update_prefs()
+
+    if not force:
+        if not prefs.get("auto_check", True):
+            return None
+        # throttle: skip if checked within TTL
+        last = prefs.get("last_check")
+        if last:
+            try:
+                elapsed = (datetime.now() - datetime.fromisoformat(last)).total_seconds()
+                if elapsed < UPDATE_CHECK_TTL:
+                    return None
+            except Exception:
+                pass
+
     try:
-        res = requests.get(f"{GITHUB_RAW_BASE}/versions.json", timeout=5)
+        res = requests.get(f"{GITHUB_RAW_BASE}/versions.json", timeout=3)
         res.raise_for_status()
         remote_versions = res.json()
         if not remote_versions:
             return None
+
+        # Stamp the successful check time
+        prefs["last_check"] = datetime.now().isoformat()
+        save_update_prefs(prefs)
+
         remote_latest = remote_versions[-1]
         remote_ver    = remote_latest["version"]
         local_ver     = get_app_version()
-        if _version_tuple(remote_ver) > _version_tuple(local_ver):
-            new_entries = [v for v in remote_versions if _version_tuple(v["version"]) > _version_tuple(local_ver)]
-            return {
-                "local":        local_ver,
-                "remote":       remote_ver,
-                "remote_notes": remote_latest["notes"],
-                "remote_date":  remote_latest["date"],
-                "all_new":      new_entries,
-            }
-        return None
+
+        if _version_tuple(remote_ver) <= _version_tuple(local_ver):
+            return None     # already up to date
+
+        # Respect user's "skip this version" choice (unless force)
+        if not force:
+            skipped = prefs.get("skipped_version")
+            if skipped and _version_tuple(remote_ver) <= _version_tuple(skipped):
+                return None
+
+        new_entries = [
+            v for v in remote_versions
+            if _version_tuple(v["version"]) > _version_tuple(local_ver)
+        ]
+        return {
+            "local":        local_ver,
+            "remote":       remote_ver,
+            "remote_notes": remote_latest["notes"],
+            "remote_date":  remote_latest["date"],
+            "all_new":      new_entries,
+        }
+
     except Exception as e:
         if not silent:
             log.warning(f"Update check failed: {e}")
         return None
 
-def perform_update(update_info):
+# ── Startup check (called once; result stored in _PENDING_UPDATE) ───────────
+def _startup_update_check():
+    """Run the update check silently and cache the result for the menu banner."""
+    global _PENDING_UPDATE
+    try:
+        _PENDING_UPDATE = check_for_updates(silent=True)
+        if _PENDING_UPDATE:
+            n = len(_PENDING_UPDATE["all_new"])
+            log.info(
+                f"Update available: v{_PENDING_UPDATE['local']} → "
+                f"v{_PENDING_UPDATE['remote']} ({n} new release{'s' if n!=1 else ''})"
+            )
+    except Exception:
+        _PENDING_UPDATE = None
+
+# ── Update flow (shown when user chooses to act on a pending update) ─────────
+def _run_update_flow(update_info: dict):
+    """Display full changelog and prompt: update / skip / later."""
+    global _PENDING_UPDATE
+    prefs     = load_update_prefs()
+    local_ver = update_info["local"]
+    remote_ver = update_info["remote"]
+    new_entries = update_info.get("all_new", [])
+    n = len(new_entries)
+
+    print(f"\n{header('  ⬆️  UPDATE AVAILABLE')}\n" + divider("-", 52))
+    print(f"  {white('Installed:')}  {yellow('v' + local_ver)}")
+    print(f"  {white('Available:')}  {green('v' + remote_ver)}  {blue(update_info['remote_date'])}")
+    print(f"  {white('Method:')}     {cyan(_detect_install_method())}")
+
+    if new_entries:
+        print(f"\n  {white(str(n) + ' new release' + ('s' if n != 1 else '') + ':')}")
+        print(divider("-", 52))
+        for v in new_entries:
+            print(f"  {green('v' + v['version'])}  {blue(v['date'])}")
+            print(f"  {white(v['notes'])}\n")
+
+    print(divider("-", 52))
+    print(f"  {green('[Y]')}  {white('Update now')}")
+    print(f"  {yellow('[S]')}  {white('Skip v' + remote_ver)}  {blue('(silent until a newer release)')}")
+    print(f"  {red('[N]')}  {white('Later')}")
+    print(divider("-", 52))
+
+    choice = input(f"  {cyan('Choice [Y/S/N]')}: ").strip().lower()
+
+    if choice == "y":
+        perform_update(update_info)
+        _PENDING_UPDATE = None       # clear banner after update
+    elif choice == "s":
+        prefs["skipped_version"] = remote_ver
+        save_update_prefs(prefs)
+        _PENDING_UPDATE = None
+        print(yellow(f"\n  v{remote_ver} skipped — banner will reappear for newer releases."))
+        log.info(f"Update skipped: v{remote_ver}")
+    else:
+        print(yellow("  Reminder kept — update banner will show on next launch."))
+
+# ── Apply update ─────────────────────────────────────────────────────────────
+def perform_update(update_info: dict):
     """
-    Download and apply the latest version from GitHub.
-    Backs up current files to old/ before replacing.
-    Offers to restart after a successful update.
+    Backup current files to old/, apply update via detected method,
+    notify Discord, then offer an in-place restart.
     """
     import shutil as _shutil
     local_ver  = update_info["local"]
@@ -418,22 +540,16 @@ def perform_update(update_info):
     method     = _detect_install_method()
 
     print(f"\n{header('  🔄  UPDATING TO v' + remote_ver)}\n" + divider("-", 52))
-    print(f"  {white('Install method:')} {cyan(method)}")
+    print(f"  {white('Install method:')}  {cyan(method)}")
     print(f"  {white('Current version:')} {yellow('v' + local_ver)}")
     print(f"  {white('New version:')}     {green('v' + remote_ver)}")
 
-    # ── Changelog for all new versions ──────────────────────
-    if update_info.get("all_new"):
-        print(f"\n  {white('What changed:')}")
-        for v in update_info["all_new"]:
-            print(f"    {green('v' + v['version'])}  {blue(v['date'])}  {white(v['notes'])}")
-
-    # ── Backup current files ─────────────────────────────────
+    # ── Backup ───────────────────────────────────────────────
     print(f"\n  {white('Backing up current files...')}")
     backup_dir = BASE_DIR / "old"
     backup_dir.mkdir(exist_ok=True)
-    ts         = datetime.now().strftime("%Y%m%d_%H%M%S")
-    backed_up  = []
+    ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backed_up = []
     for fname in UPDATE_FILES:
         src = BASE_DIR / fname
         if src.exists():
@@ -446,7 +562,7 @@ def perform_update(update_info):
     if backed_up:
         print(f"  {green('✅ Backed up')} {yellow(str(len(backed_up)))} file(s) to {blue('old/')}")
 
-    # ── Apply update ─────────────────────────────────────────
+    # ── Apply ─────────────────────────────────────────────────
     success = False
     print(divider("-", 52))
 
@@ -457,7 +573,7 @@ def perform_update(update_info):
                 capture_output=True, text=True, cwd=str(BASE_DIR),
             )
             if result.returncode == 0:
-                print(green(f"  ✅ git pull succeeded."))
+                print(green("  ✅ git pull succeeded."))
                 log.info(f"Updated via git pull: v{local_ver} → v{remote_ver}")
                 success = True
             else:
@@ -485,17 +601,16 @@ def perform_update(update_info):
             print(red(f"  ❌ pip error: {e}"))
             log.error(f"Update pip error: {e}")
 
-    else:
-        # Raw file download — write to .tmp then move
+    else:   # raw file-by-file download
         all_ok = True
         for fname in UPDATE_FILES:
             url = f"{GITHUB_RAW_BASE}/{fname}"
             dst = BASE_DIR / fname
             tmp = dst.with_suffix(".update_tmp")
             try:
-                res = requests.get(url, timeout=15)
-                res.raise_for_status()
-                tmp.write_bytes(res.content)
+                r = requests.get(url, timeout=15)
+                r.raise_for_status()
+                tmp.write_bytes(r.content)
                 _shutil.move(str(tmp), str(dst))
                 print(f"  {green('✅')} {white(fname)}")
                 log.info(f"Downloaded update: {fname}")
@@ -507,7 +622,7 @@ def perform_update(update_info):
                 all_ok = False
         success = all_ok
 
-    # ── Post-update ──────────────────────────────────────────
+    # ── Post-update ───────────────────────────────────────────
     if success:
         print(f"\n  {green('✅ Update complete!')}  {yellow('v'+local_ver)} → {green('v'+remote_ver)}")
         log.info(f"Update applied: v{local_ver} → v{remote_ver} ({method})")
@@ -518,13 +633,13 @@ def perform_update(update_info):
             f"🔄 Method: `{method}`",
             title="🆙 Plex Manager Updated", color=0x57F287,
         )
-        restart = input(f"\n  {cyan('Restart now to apply changes? (y/n)')}: ").strip().lower()
+        restart = input(f"\n  {cyan('Restart now to apply changes? [y/N]')}: ").strip().lower()
         if restart == "y":
             print(yellow("  Restarting..."))
             log.info("Restarting after update.")
             os.execv(sys.executable, [sys.executable] + sys.argv)
     else:
-        print(red("\n  ❌ Update failed. Original files are backed up in old/ and unchanged."))
+        print(red("\n  ❌ Update failed. Original files backed up in old/ and unchanged."))
         log.error(f"Update failed: v{local_ver} → v{remote_ver} ({method})")
 
     return success
@@ -880,12 +995,8 @@ def startup_servers():
         color=0x57F287
     )
 
-    # Silent update check — notify if update is available, don't block startup
-    update = check_for_updates(silent=True)
-    if update:
-        print(f"\n  {yellow('💡 Update available:')}  {white('v'+update['local'])} → {green('v'+update['remote'])}")
-        print(f"     {white(update['remote_notes'])}")
-        print(f"     {blue('Go to Version Manager [6] → [5] Check for Updates')}\n")
+    # Silent update check — result stored in _PENDING_UPDATE for menu banner
+    _startup_update_check()
 
 # ─────────────────────────────────────────
 #  VERSION MANAGER MENU
@@ -903,6 +1014,7 @@ def version_menu():
         print(f"  {yellow('[4]')}  {white('Track / Snapshot to Log & Discord')}")
         print(divider("-", 52))
         print(f"  {green('[5]')}  {white('Check for Updates / Update Now')}")
+        print(f"  {green('[6]')}  {white('Update Settings')}")
         print(f"  {red('[0]')}  {white('Back to Main Menu')}")
         print(divider())
         choice = input(f"  {cyan('Select an option')}: ").strip()
@@ -985,24 +1097,56 @@ def version_menu():
             print(green(f"  ✅ Snapshot written to plex.log and Discord  |  App v{cyan(app_ver)}"))
 
         elif choice == "5":
-            print(f"\n  {cyan('🔍 Checking for updates...')}")
-            update = check_for_updates(silent=False)
+            # Force check — bypasses cache and skipped_version
+            print(f"\n  {cyan('🔍 Checking GitHub for updates...')}")
+            update = check_for_updates(silent=False, force=True)
             if not update:
                 print(green(f"  ✅ You are on the latest version (v{get_app_version()})."))
             else:
-                print(f"\n{header('  🆙  UPDATE AVAILABLE')}\n" + divider("-", 52))
-                print(f"  {white('Current:')} {yellow('v' + update['local'])}")
-                print(f"  {white('Latest:')}  {green('v' + update['remote'])}  {blue(update['remote_date'])}")
-                print(f"\n  {white('What changed:')}")
-                for v in update.get("all_new", []):
-                    print(f"    {green('v' + v['version'])}  {blue(v['date'])}")
-                    print(f"    {white(v['notes'])}")
+                _run_update_flow(update)
+
+        elif choice == "6":
+            # ── Update Settings ─────────────────────────────
+            while True:
+                prefs  = load_update_prefs()
+                auto   = prefs.get("auto_check", True)
+                skip   = prefs.get("skipped_version")
+                last   = prefs.get("last_check")
+                last_s = last[:19].replace("T", "  ") if last else "never"
+
+                print(f"\n{header('  ⚙️  UPDATE SETTINGS')}\n" + divider("-", 52))
+                print(f"  {white('Auto-check on startup:')}  {green('ON') if auto else red('OFF')}")
+                print(f"  {white('Last check:')}            {blue(last_s)}")
+                print(f"  {white('Skipped version:')}       {yellow('v' + skip) if skip else blue('none')}")
                 print(divider("-", 52))
-                confirm = input(f"\n  {cyan('Update now? (y/n)')}: ").strip().lower()
-                if confirm == "y":
-                    perform_update(update)
+                print(f"  {yellow('[1]')}  {white('Toggle auto-check')}  ({green('ON') if auto else red('OFF')} → {red('OFF') if auto else green('ON')})")
+                if skip:
+                    print(f"  {yellow('[2]')}  {white('Clear skipped version')}  {blue('(re-show v' + skip + ' banner)')}")
+                print(f"  {yellow('[3]')}  {white('Reset last-check timestamp')}  {blue('(force check at next startup)')}")
+                print(f"  {red('[0]')}  {white('Back')}")
+                print(divider())
+
+                sub = input(f"  {cyan('Select')}: ").strip()
+                if sub == "0":
+                    break
+                elif sub == "1":
+                    prefs["auto_check"] = not auto
+                    save_update_prefs(prefs)
+                    state = green("ON") if prefs["auto_check"] else red("OFF")
+                    print(green(f"  ✅ Auto-check set to {state}"))
+                elif sub == "2" and skip:
+                    prefs["skipped_version"] = None
+                    save_update_prefs(prefs)
+                    # Re-expose the skipped version in the banner
+                    global _PENDING_UPDATE
+                    _PENDING_UPDATE = check_for_updates(force=True, silent=True)
+                    print(green(f"  ✅ Skipped version cleared — banner will show if v{skip} is still latest."))
+                elif sub == "3":
+                    prefs["last_check"] = None
+                    save_update_prefs(prefs)
+                    print(green("  ✅ Timestamp reset — update will be checked at next startup."))
                 else:
-                    print(yellow("  Update skipped."))
+                    print(red("  ⚠️  Invalid option."))
 
         else:
             print(red("  ⚠️  Invalid option."))
@@ -3513,6 +3657,13 @@ def menu():
         print(header(f"         🎬  PLEX API MANAGER"))
         print(cyan( f"         v{app_ver}  ·  {srv_info}"))
         print(blue( f"         {log_id}  {latest['notes']}"))
+
+        # ── Update banner (shown every loop while update is pending) ──────
+        if _PENDING_UPDATE:
+            n       = len(_PENDING_UPDATE["all_new"])
+            rel_s   = f"{n} new release{'s' if n != 1 else ''}"
+            print(yellow(f"         ⬆️  Update available: v{_PENDING_UPDATE['local']} → v{_PENDING_UPDATE['remote']}  ({rel_s})"))
+
         print(divider())
         watchlist_count  = len(load_watchlist())
         movie_list_count = len(load_movie_list())
@@ -3528,6 +3679,8 @@ def menu():
         print(f"  {magenta('[7]')}  {white('Discord Notification Settings')}")
         print(f"  {magenta('[8]')}  {white('Server Manager')}  {blue(f'({len(servers)} server' + ('s' if len(servers)!=1 else '') + ' configured)')}")
         print(f"  {magenta('[T]')}  {white('Color Theme')}  {blue(f'({active_theme})')}")
+        if _PENDING_UPDATE:
+            print(f"  {green('[U]')}  {white('Update to v' + _PENDING_UPDATE['remote'])}  {blue('— ' + _PENDING_UPDATE['remote_notes'][:50])}")
         print(divider("-", 52))
         print(f"  {red('[0]')}  {white('Exit')}")
         print(divider())
@@ -3545,6 +3698,11 @@ def menu():
         elif choice == "8": server_manager_menu()
         elif choice == "9": movie_list_menu()
         elif choice == "t": theme_menu()
+        elif choice == "u":
+            if _PENDING_UPDATE:
+                _run_update_flow(_PENDING_UPDATE)
+            else:
+                print(yellow("  No pending update. Use Version Manager [6] → [5] to force check."))
         else:               print(red("  ⚠️  Invalid option. Please try again."))
 
 # ─────────────────────────────────────────

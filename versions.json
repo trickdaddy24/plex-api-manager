@@ -158,5 +158,10 @@
     "version": "0.0.32",
     "date": "2026-02-28",
     "notes": "update install.sh to support macOS — auto-detects Darwin vs Linux, uses Homebrew for Python and pipx on Mac, correct shell reload instructions per platform"
+  },
+  {
+    "version": "0.0.33",
+    "date": "2026-02-28",
+    "notes": "overhaul self-update system — _PENDING_UPDATE global, 1hr check cache, skip-version and auto_check prefs in update_prefs.json, [U] shortcut in main menu, changelog before confirm, Version Manager [6] Update Settings submenu"
   }
 ]

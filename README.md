@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.32`
+**Current version:** `v0.0.33`
 
 ---
 
@@ -18,7 +18,7 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 - **Movie Search List** — search TMDB, auto-fill metadata (title, year, IMDB/RT ratings, runtime, MPAA rating), assign internal IDs (ms000001), and send directly to Radarr
 - **Movie Database** — bulk-enriches your entire Plex movie library with TMDB + OMDB metadata; respects 1000-call/day quota with automatic scheduler continuation; searchable local JSON; add any result to your Movie Search List; dedicated `logs/movie_db/` log folder
 - **Color themes** — 10 built-in presets (Plex Classic, Midnight, Hacker, Sunset, Neon, Dracula, Monochrome, Ocean, Amber, Cherry) plus a fully custom role editor; press `[T]` from the main menu; saved to `theme.json`
-- **Self-update** — checks GitHub for updates on every startup; update via Version Manager `[6] → [5]`; backs up current files to `old/` before replacing; restarts in-place after update; supports git pull, pip upgrade, and raw file download
+- **Self-update** — checks GitHub on startup (1hr cache); update banner + `[U]` shortcut in main menu; shows full changelog before applying; skip a version, toggle auto-check, or force-check via Version Manager `[6] → [5/6]`; backs up to `old/`, restarts in-place; supports git pull, pip upgrade, and raw download
 - **Discord notifications** — rich embeds on startup, server switch, library list, version adds, and stream kills
 - **System info on startup** — OS version, external public IP, and active stream count sent to Discord automatically
 - **Daily heartbeat** — cross-platform scheduler fires once daily at a random time between 00:00–11:59, self-rescheduling after each run
@@ -277,6 +277,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.33 | Overhaul self-update system — persistent banner + `[U]` shortcut, changelog before confirm, skip-version, auto-check toggle, 1hr cache, Update Settings submenu in Version Manager |
 | v0.0.32 | Update install.sh for macOS — auto-detects Darwin vs Linux, Homebrew for Python/pipx, correct shell reload hint per platform |
 | v0.0.31 | Add color theme system — 10 presets + custom role editor; `[T]` in main menu; saved to theme.json |
 | v0.0.30 | docker-compose.yml — add port mapping 9998:9991 to plex-manager service |
