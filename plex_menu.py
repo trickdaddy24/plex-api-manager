@@ -3,7 +3,6 @@ import sys
 import json
 import logging
 import platform
-import socket
 from datetime import datetime
 from pathlib import Path
 
@@ -80,15 +79,18 @@ def divider(char="═", n=52): return c(char * n, Fore.BLUE + Style.BRIGHT)
 #  SYSTEM INFO
 # ─────────────────────────────────────────
 def get_system_info():
-    """Return OS name/version and local IP address."""
+    """Return OS name/version and external public IP address."""
     os_name    = platform.system()
     os_release = platform.release()
     os_version = platform.version()
     os_str     = f"{os_name} {os_release} ({os_version})"
-    try:
-        ip = socket.gethostbyname(socket.gethostname())
-    except Exception:
-        ip = "Unknown"
+    ip = "Unknown"
+    for url in ["https://api.ipify.org", "https://ifconfig.me/ip", "https://ipecho.net/plain"]:
+        try:
+            ip = requests.get(url, timeout=5).text.strip()
+            break
+        except Exception:
+            continue
     return {"os": os_str, "ip": ip}
 
 # ─────────────────────────────────────────
@@ -1420,7 +1422,7 @@ def _sanitize_reason(msg):
     msg = re.sub(r'<[^>]+>', '', msg)
 
     # Strip non-printable / control characters
-    msg = re.sub(r'[^ -~ -￿]', '', msg)
+    msg = re.sub(r'[^ -~ -￿]', '', msg)
 
     # Limit length
     msg = msg.strip()[:200]
