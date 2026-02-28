@@ -103,5 +103,10 @@
     "version": "0.0.21",
     "date": "2026-02-28",
     "notes": "add pyproject.toml and install.sh for pip install from GitHub, smart BASE_DIR for clone vs pip mode, main() entry points in all scripts"
+  },
+  {
+    "version": "0.0.22",
+    "date": "2026-02-28",
+    "notes": "fix install.sh for private repo — installs from local clone instead of raw curl, copies example config from repo"
   }
 ]

@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # install.sh — Ubuntu/Linux installer for Plex API Manager
+# Run this from inside the cloned repo directory:
+#   git clone https://<token>@github.com/trickdaddy24/plex-api-manager.git
+#   cd plex-api-manager
+#   bash install.sh
 set -e
 
-REPO="https://github.com/trickdaddy24/plex-api-manager.git"
 CONFIG_DIR="$HOME/.plex-manager"
-EXAMPLE_URL="https://raw.githubusercontent.com/trickdaddy24/plex-api-manager/main/plex_servers.example.json"
 
 echo ""
 echo "🎬 Plex API Manager — Installer"
@@ -27,9 +29,15 @@ if ! command -v pip3 &>/dev/null; then
     sudo apt-get install -y python3-pip
 fi
 
-# ── Install package from GitHub ──────────────────────────────
-echo "📦 Installing plex-api-manager from GitHub..."
-pip3 install --user --upgrade "git+$REPO"
+# ── Install from local clone ─────────────────────────────────
+if [ ! -f "pyproject.toml" ]; then
+    echo "❌ pyproject.toml not found."
+    echo "   Run this script from inside the cloned repo directory."
+    exit 1
+fi
+
+echo "📦 Installing plex-api-manager..."
+pip3 install --user --upgrade .
 
 # ── Ensure PATH includes ~/.local/bin ────────────────────────
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
@@ -45,12 +53,10 @@ echo "✅ Config dir: $CONFIG_DIR"
 
 # ── Server config template ────────────────────────────────────
 if [ ! -f "$CONFIG_DIR/plex_servers.json" ]; then
-    if command -v curl &>/dev/null; then
-        curl -sL "$EXAMPLE_URL" -o "$CONFIG_DIR/plex_servers.json"
+    if [ -f "plex_servers.example.json" ]; then
+        cp plex_servers.example.json "$CONFIG_DIR/plex_servers.json"
         echo "✅ Server config template copied to $CONFIG_DIR/plex_servers.json"
         echo "   ⚠️  Edit it with your Plex server URL and token before running."
-    else
-        echo "⚠️  curl not found — copy plex_servers.example.json to $CONFIG_DIR/plex_servers.json manually."
     fi
 else
     echo "✅ Existing server config found — not overwritten."

@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.21`
+**Current version:** `v0.0.22`
 
 ---
 
@@ -32,16 +32,17 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 
 ## Install
 
-### Option A — pip install from GitHub (recommended for Ubuntu server)
+### Option A — Ubuntu server (private repo via token)
 
+**1. Generate a GitHub personal access token**
+GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
+Give it `Contents: Read-only` access to this repo.
+
+**2. Clone and install on the server**
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/trickdaddy24/plex-api-manager/main/install.sh)
-```
-
-Or manually:
-
-```bash
-pip3 install --user git+https://github.com/trickdaddy24/plex-api-manager.git
+git clone https://<YOUR_TOKEN>@github.com/trickdaddy24/plex-api-manager.git
+cd plex-api-manager
+bash install.sh
 ```
 
 After install, three commands are available globally:
@@ -190,6 +191,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.22 | Fix install.sh for private repo — local clone install, copies example config from repo |
 | v0.0.21 | pip installable via pyproject.toml + install.sh, smart BASE_DIR, main() entry points |
 | v0.0.20 | Add heartbeat_scheduler.py — cross-platform daily scheduling, random time 00:00–11:59 |
 | v0.0.19 | Recreated system_info_notify.py with OS, external IP, and active stream count |
