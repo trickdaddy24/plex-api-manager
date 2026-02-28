@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import json
@@ -37,7 +38,15 @@ init(autoreset=True)
 # ─────────────────────────────────────────
 #  PATHS
 # ─────────────────────────────────────────
-BASE_DIR      = Path(__file__).parent
+_script_dir = Path(__file__).parent
+if (_script_dir / "versions.json").exists():
+    BASE_DIR = _script_dir                          # dev / git-clone mode
+else:
+    BASE_DIR = Path(os.environ.get(               # pip-installed mode
+        "PLEX_MANAGER_HOME", Path.home() / ".plex-manager"
+    ))
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+
 LOG_DIR       = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 LOG_FILE      = LOG_DIR / "plex.log"
@@ -2025,9 +2034,12 @@ def menu():
 # ─────────────────────────────────────────
 #  ENTRY POINT
 # ─────────────────────────────────────────
-if __name__ == "__main__":
+def main():
     app_ver = get_app_version()
     log.info(f"=== Plex API Manager v{app_ver} started ===")
     startup_servers()
     menu()
     log.info(f"=== Plex API Manager v{app_ver} closed ===")
+
+if __name__ == "__main__":
+    main()

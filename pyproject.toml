@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "plex-api-manager"
+version = "0.0.21"
+description = "Multi-server Plex CLI with Discord notifications and heartbeat scheduler"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "requests",
+    "colorama",
+]
+
+[project.scripts]
+plex-manager   = "plex_menu:main"
+plex-heartbeat = "system_info_notify:main"
+plex-scheduler = "heartbeat_scheduler:main"
+
+[tool.setuptools]
+py-modules = ["plex_menu", "system_info_notify", "heartbeat_scheduler"]

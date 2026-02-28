@@ -21,6 +21,9 @@ plex_menu.*.py
 # Claude internal
 .claude/
 
+# Heartbeat state (auto-generated)
+heartbeat.json
+
 # Python
 __pycache__/
 *.pyc

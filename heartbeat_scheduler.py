@@ -8,20 +8,47 @@ Usage:
   python heartbeat_scheduler.py          # schedule next run and exit
   python heartbeat_scheduler.py --status # show next scheduled run
   python heartbeat_scheduler.py --remove # remove the scheduled task
+
+  # or when installed via pip:
+  plex-scheduler
+  plex-scheduler --status
+  plex-scheduler --remove
 """
 
 import json
+import os
 import platform
 import random
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-BASE_DIR       = Path(__file__).parent
+# ── Base directory — dev clone vs pip install ─────────────────
+_script_dir = Path(__file__).parent
+if (_script_dir / "versions.json").exists():
+    BASE_DIR = _script_dir
+else:
+    BASE_DIR = Path(os.environ.get(
+        "PLEX_MANAGER_HOME", Path.home() / ".plex-manager"
+    ))
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+
 HEARTBEAT_FILE = BASE_DIR / "heartbeat.json"
-SCRIPT_PATH    = BASE_DIR / "system_info_notify.py"
 TASK_NAME      = "PlexHeartbeat"
+
+# ─────────────────────────────────────────
+#  HEARTBEAT COMMAND RESOLVER
+#  Finds the right command to run system_info_notify:
+#  - pip install → uses the plex-heartbeat entry point (full path)
+#  - git clone   → uses python <script path>
+# ─────────────────────────────────────────
+def _heartbeat_cmd():
+    ep = shutil.which("plex-heartbeat")
+    if ep:
+        return [ep]
+    return [sys.executable, str(_script_dir / "system_info_notify.py")]
 
 # ─────────────────────────────────────────
 #  RANDOM TIME PICKER  (00:00 – 11:59)
@@ -59,17 +86,13 @@ def load_heartbeat():
 #  WINDOWS — Task Scheduler via schtasks
 # ─────────────────────────────────────────
 def schedule_windows(next_time: str):
-    python_exe  = sys.executable
-    script      = str(SCRIPT_PATH)
-    cmd_create = [
-        "schtasks", "/create",
-        "/tn", TASK_NAME,
-        "/tr", f'"{python_exe}" "{script}"',
-        "/sc", "DAILY",
-        "/st", next_time,
-        "/f"            # overwrite if already exists
-    ]
-    result = subprocess.run(cmd_create, capture_output=True, text=True)
+    cmd    = _heartbeat_cmd()
+    tr_arg = " ".join(f'"{c}"' for c in cmd)
+    result = subprocess.run(
+        ["schtasks", "/create", "/tn", TASK_NAME,
+         "/tr", tr_arg, "/sc", "DAILY", "/st", next_time, "/f"],
+        capture_output=True, text=True
+    )
     if result.returncode == 0:
         print(f"  ✅ Windows Task Scheduler: '{TASK_NAME}' set for {next_time} daily.")
     else:
@@ -90,19 +113,19 @@ def remove_windows():
 #  LINUX — crontab
 # ─────────────────────────────────────────
 def schedule_linux(next_time: str):
-    python_exe = sys.executable
-    script     = str(SCRIPT_PATH)
+    cmd       = _heartbeat_cmd()
+    cmd_str   = " ".join(cmd)
     hour, minute = next_time.split(":")
-    cron_line  = f"{minute} {hour} * * * {python_exe} {script} # {TASK_NAME}"
+    cron_line = f"{minute} {hour} * * * {cmd_str} # {TASK_NAME}"
 
-    # Read existing crontab, strip any previous PlexHeartbeat line
     existing = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    lines = [l for l in existing.stdout.splitlines()
-             if TASK_NAME not in l and "system_info_notify" not in l]
+    lines    = [l for l in existing.stdout.splitlines()
+                if TASK_NAME not in l and "system_info_notify" not in l]
     lines.append(cron_line)
 
-    new_crontab = "\n".join(lines) + "\n"
-    proc = subprocess.run(["crontab", "-"], input=new_crontab, text=True, capture_output=True)
+    proc = subprocess.run(["crontab", "-"],
+                          input="\n".join(lines) + "\n",
+                          text=True, capture_output=True)
     if proc.returncode == 0:
         print(f"  ✅ Crontab updated: '{TASK_NAME}' set for {next_time} daily.")
     else:
@@ -111,8 +134,8 @@ def schedule_linux(next_time: str):
 
 def remove_linux():
     existing = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
-    lines = [l for l in existing.stdout.splitlines()
-             if TASK_NAME not in l and "system_info_notify" not in l]
+    lines    = [l for l in existing.stdout.splitlines()
+                if TASK_NAME not in l and "system_info_notify" not in l]
     subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n", text=True)
     print(f"  ✅ '{TASK_NAME}' removed from crontab.")
 
@@ -149,9 +172,9 @@ def remove_schedule():
         print("  🗑️  heartbeat.json removed.")
 
 # ─────────────────────────────────────────
-#  STANDALONE RUN
+#  STANDALONE / ENTRY POINT
 # ─────────────────────────────────────────
-if __name__ == "__main__":
+def main():
     if "--status" in sys.argv:
         data = load_heartbeat()
         if data:
@@ -160,10 +183,11 @@ if __name__ == "__main__":
             print(f"  🕐 Scheduled: {data['scheduled_at']}")
         else:
             print("  ⚠️  No heartbeat scheduled yet. Run without --status to set one.")
-
     elif "--remove" in sys.argv:
         remove_schedule()
-
     else:
         print("🗓️  Scheduling next heartbeat...")
         schedule_next()
+
+if __name__ == "__main__":
+    main()

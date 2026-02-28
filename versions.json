@@ -98,5 +98,10 @@
     "version": "0.0.20",
     "date": "2026-02-28",
     "notes": "add heartbeat_scheduler.py for cross-platform daily scheduling (Windows/Linux), reschedules at random time 00:00-11:59 after each run"
+  },
+  {
+    "version": "0.0.21",
+    "date": "2026-02-28",
+    "notes": "add pyproject.toml and install.sh for pip install from GitHub, smart BASE_DIR for clone vs pip mode, main() entry points in all scripts"
   }
 ]

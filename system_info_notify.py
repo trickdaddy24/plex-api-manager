@@ -1,11 +1,21 @@
 import json
+import os
 import platform
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
 
-BASE_DIR     = Path(__file__).parent
+# ── Base directory — dev clone vs pip install ─────────────────
+_script_dir = Path(__file__).parent
+if (_script_dir / "versions.json").exists():
+    BASE_DIR = _script_dir
+else:
+    BASE_DIR = Path(os.environ.get(
+        "PLEX_MANAGER_HOME", Path.home() / ".plex-manager"
+    ))
+    BASE_DIR.mkdir(parents=True, exist_ok=True)
+
 DISCORD_FILE = BASE_DIR / "discord_creds.json"
 SERVERS_FILE = BASE_DIR / "plex_servers.json"
 
@@ -81,7 +91,7 @@ def send(webhook_url, sysinfo, stream_count, next_run=None):
 # ─────────────────────────────────────────
 #  MAIN
 # ─────────────────────────────────────────
-if __name__ == "__main__":
+def main():
     print("🔍 Gathering system info...")
     sysinfo      = get_system_info()
     stream_count = get_active_stream_count()
@@ -95,8 +105,8 @@ if __name__ == "__main__":
     try:
         from heartbeat_scheduler import schedule_next
         print("\n🗓️  Scheduling next heartbeat...")
-        next_time     = schedule_next()
-        tomorrow      = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        next_time      = schedule_next()
+        tomorrow       = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
         next_run_label = f"{tomorrow} at {next_time}"
     except Exception as e:
         print(f"  ⚠️  Scheduler error: {e}")
@@ -106,3 +116,6 @@ if __name__ == "__main__":
         print("⚠️  No webhook found in discord_creds.json")
     else:
         send(webhook, sysinfo, stream_count, next_run=next_run_label)
+
+if __name__ == "__main__":
+    main()

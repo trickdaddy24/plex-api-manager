@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.20`
+**Current version:** `v0.0.21`
 
 ---
 
@@ -17,32 +17,61 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 - **Watchlist / Favorites** — track items you want to watch, export in multiple formats
 - **Discord notifications** — rich embeds on startup, server switch, library list, version adds, and stream kills
 - **System info on startup** — OS version, external public IP, and active stream count sent to Discord automatically
-- **Daily heartbeat** — cross-platform scheduler fires `system_info_notify.py` once daily at a random time between 00:00–11:59, self-rescheduling after each run
+- **Daily heartbeat** — cross-platform scheduler fires once daily at a random time between 00:00–11:59, self-rescheduling after each run
 - **Version manager** — track your own changelog entries inside the app
+- **pip installable** — install directly from GitHub, works on Windows and Ubuntu
 
 ---
 
 ## Requirements
 
 - Python 3.8+
-- Dependencies are auto-installed on first run (`requests`, `colorama`)
+- `requests` and `colorama` — installed automatically
 
 ---
 
-## Setup
+## Install
 
-**1. Clone the repo**
+### Option A — pip install from GitHub (recommended for Ubuntu server)
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/trickdaddy24/plex-api-manager/main/install.sh)
+```
+
+Or manually:
+
+```bash
+pip3 install --user git+https://github.com/trickdaddy24/plex-api-manager.git
+```
+
+After install, three commands are available globally:
+
+```bash
+plex-manager      # interactive menu
+plex-heartbeat    # send system info to Discord now
+plex-scheduler    # manage daily heartbeat schedule
+```
+
+Config and data files are stored in `~/.plex-manager/`.
+
+### Option B — Git clone (Windows / local dev)
+
 ```bash
 git clone https://github.com/trickdaddy24/plex-api-manager.git
 cd plex-api-manager
-```
-
-**2. Run the script**
-```bash
 python plex_menu.py
 ```
 
-On first launch you'll be prompted to enter your Plex server URL and token. These are saved locally to `plex_servers.json` (not committed).
+Data files stay in the cloned directory.
+
+---
+
+## First-Time Setup
+
+1. Edit `plex_servers.json` (clone) or `~/.plex-manager/plex_servers.json` (pip) with your Plex URL and token
+2. Launch `plex-manager` or `python plex_menu.py`
+3. Go to **option 7** → set your Discord webhook
+4. Run `plex-scheduler` to activate the daily heartbeat
 
 **Finding your Plex token:** Sign into Plex, browse to any media item, click ··· → Get Info → View XML. The token is in the URL as `X-Plex-Token=`.
 
@@ -57,12 +86,7 @@ On first launch you'll be prompted to enter your Plex server URL and token. Thes
 | `discord_creds.json` | Discord webhook URL | ❌ |
 | `versions.json` | App version history | ✅ |
 | `watchlist.json` | Your watchlist | ✅ |
-
-To configure servers manually, copy the example file:
-```bash
-cp plex_servers.example.json plex_servers.json
-```
-Then edit `plex_servers.json` with your server details.
+| `heartbeat.json` | Next scheduled run time | ❌ (auto-generated) |
 
 ---
 
@@ -71,7 +95,7 @@ Then edit `plex_servers.json` with your server details.
 ```
 ╔════════════════════════════════════════════════════╗
 ║         🎬  PLEX API MANAGER                       ║
-║         v0.0.18  ·  MyServer  ·  12 libraries      ║
+║         v0.0.21  ·  MyServer  ·  12 libraries      ║
 ╠════════════════════════════════════════════════════╣
 ║  [1]  List All Libraries                           ║
 ║  [2]  Search My Library with Totals                ║
@@ -109,13 +133,28 @@ Every launch sends a Discord embed containing:
   [4]  Send System Info  (OS · IP · Active Streams)
 ```
 
-Option `[4]` lets you fire a system info embed on demand at any time.
-
 ### Other automatic triggers
 - Server switch
 - Library listings
 - Version entries added
 - Stream kills
+
+---
+
+## Daily Heartbeat
+
+Runs `system_info_notify.py` once per day at a random time between 00:00–11:59. After each run it reschedules itself for the next day at a new random time.
+
+```bash
+plex-scheduler            # set up / reschedule
+plex-scheduler --status   # show next scheduled run
+plex-scheduler --remove   # remove the task entirely
+```
+
+| Platform | Mechanism |
+|---|---|
+| Windows | Task Scheduler (`schtasks`) |
+| Linux / Ubuntu | crontab |
 
 ---
 
@@ -134,7 +173,8 @@ Option `[4]` lets you fire a system info embed on demand at any time.
 plex_menu.py              # Main script — everything lives here
 system_info_notify.py     # Standalone heartbeat — OS, IP, streams → Discord
 heartbeat_scheduler.py    # Cross-platform scheduler (Windows/Linux)
-heartbeat.json            # Stores next scheduled run time (auto-generated)
+pyproject.toml            # pip package definition + entry points
+install.sh                # Ubuntu one-liner installer
 plex_servers.example.json # Server config template
 versions.json             # Changelog / version history
 watchlist.json            # Saved watchlist items
@@ -150,6 +190,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.21 | pip installable via pyproject.toml + install.sh, smart BASE_DIR, main() entry points |
 | v0.0.20 | Add heartbeat_scheduler.py — cross-platform daily scheduling, random time 00:00–11:59 |
 | v0.0.19 | Recreated system_info_notify.py with OS, external IP, and active stream count |
 | v0.0.18 | Moved system info into Discord settings menu option 4, removed standalone py |
