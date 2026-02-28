@@ -88,5 +88,10 @@
     "version": "0.0.18",
     "date": "2026-02-28",
     "notes": "moved system info notify into discord settings menu option 4, removed standalone py"
+  },
+  {
+    "version": "0.0.19",
+    "date": "2026-02-28",
+    "notes": "recreated system_info_notify.py with OS, external IP, and active stream count"
   }
 ]
