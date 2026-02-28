@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.31`
+**Current version:** `v0.0.32`
 
 ---
 
@@ -30,19 +30,27 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 ## Requirements
 
 - Python 3.8+
-- `requests` and `colorama` — installed automatically
+- `requests` and `colorama` — auto-installed on first run
+
+| Platform | Python | Notes |
+|---|---|---|
+| macOS | `brew install python` | Homebrew required for one-liner install |
+| Ubuntu / Linux | `sudo apt install python3` | pipx handled by installer |
+| Windows | [python.org](https://www.python.org/downloads/) | Run with `python plex_menu.py` |
 
 ---
 
 ## Install
 
-### Option A — Ubuntu server (one-liner)
+### Option A — macOS / Ubuntu / Linux (one-liner)
+
+The installer auto-detects your OS and sets up Python + pipx + global commands.
 
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/trickdaddy24/plex-api-manager/main/install.sh)
 ```
 
-This will install Python deps, register three global commands, create `~/.plex-manager/`, and copy the server config template.
+After install, three global commands are registered and `~/.plex-manager/` is created with a config template:
 
 ```bash
 plex-manager      # interactive menu
@@ -50,15 +58,36 @@ plex-heartbeat    # send system info to Discord now
 plex-scheduler    # manage daily heartbeat schedule
 ```
 
-### Option B — Git clone (Windows / local dev)
+#### macOS prerequisites
+
+macOS requires [Homebrew](https://brew.sh) — the installer will check for it and exit with instructions if it's missing. Install Homebrew first if you don't have it:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
+
+The installer then handles Python 3 and pipx automatically via `brew install`.
+
+> **Shell note:** macOS uses `zsh` by default. If `plex-manager` isn't found after install, run `source ~/.zshrc` (or `source ~/.bash_profile` if you use bash).
+
+#### Ubuntu / Linux prerequisites
+
+Python 3 must be installed. The installer handles pipx via `apt-get`.
+
+```bash
+sudo apt install python3   # if not already installed
+```
+
+### Option B — Git clone (Windows / macOS / local dev)
 
 ```bash
 git clone https://github.com/trickdaddy24/plex-api-manager.git
 cd plex-api-manager
-python plex_menu.py
+python3 plex_menu.py      # macOS / Linux
+python  plex_menu.py      # Windows
 ```
 
-Data files stay in the cloned directory.
+Dependencies (`requests`, `colorama`) are installed automatically on first run. Data files stay in the cloned directory.
 
 ### Option C — Docker
 
@@ -248,6 +277,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.32 | Update install.sh for macOS — auto-detects Darwin vs Linux, Homebrew for Python/pipx, correct shell reload hint per platform |
 | v0.0.31 | Add color theme system — 10 presets + custom role editor; `[T]` in main menu; saved to theme.json |
 | v0.0.30 | docker-compose.yml — add port mapping 9998:9991 to plex-manager service |
 | v0.0.29 | Add Docker support — Dockerfile, docker-compose.yml, docker-entrypoint.sh, .dockerignore; data volume at ./data/; profiles for scan and heartbeat |

@@ -153,5 +153,10 @@
     "version": "0.0.31",
     "date": "2026-02-28",
     "notes": "add color theme system — 10 presets (Plex Classic, Midnight, Hacker, Sunset, Neon, Dracula, Monochrome, Ocean, Amber, Cherry) + custom role editor; [T] in main menu; saved to theme.json"
+  },
+  {
+    "version": "0.0.32",
+    "date": "2026-02-28",
+    "notes": "update install.sh to support macOS — auto-detects Darwin vs Linux, uses Homebrew for Python and pipx on Mac, correct shell reload instructions per platform"
   }
 ]
