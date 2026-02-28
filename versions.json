@@ -143,5 +143,10 @@
     "version": "0.0.29",
     "date": "2026-02-28",
     "notes": "add Docker support — Dockerfile (python:3.12-slim), docker-compose.yml with scan and heartbeat profiles, docker-entrypoint.sh seeds /data on first run, .dockerignore excludes secrets and caches"
+  },
+  {
+    "version": "0.0.30",
+    "date": "2026-02-28",
+    "notes": "docker-compose.yml — add port mapping 9998:9991 to plex-manager service"
   }
 ]

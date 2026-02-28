@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.29`
+**Current version:** `v0.0.30`
 
 ---
 
@@ -247,6 +247,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.30 | docker-compose.yml — add port mapping 9998:9991 to plex-manager service |
 | v0.0.29 | Add Docker support — Dockerfile, docker-compose.yml, docker-entrypoint.sh, .dockerignore; data volume at ./data/; profiles for scan and heartbeat |
 | v0.0.28 | Add self-update system — startup check, Version Manager [5], git/pip/raw download, backup to old/, in-place restart, Discord notify |
 | v0.0.27 | Add Movie Database — enriches all Plex movies with TMDB/OMDB, 1000/day quota, scheduler continuation, Discord notifications, dedicated log folder |
