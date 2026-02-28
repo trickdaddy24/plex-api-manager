@@ -188,5 +188,10 @@
     "version": "0.0.38",
     "date": "2026-02-28",
     "notes": "restore About screen right border — use _vlen() helper to strip ANSI codes before padding calc; formula: pad = BOX - 4 - vlen(inner); BOX=58 fits all content"
+  },
+  {
+    "version": "0.0.39",
+    "date": "2026-02-28",
+    "notes": "widen About box to BOX=72 / LW=16; add live runtime section: Python version, platform, install method, active server, library count, active streams; blank spacer rows between sections"
   }
 ]

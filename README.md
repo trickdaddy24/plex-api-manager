@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.38`
+**Current version:** `v0.0.39`
 
 ---
 
@@ -277,6 +277,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.39 | Widen About box (BOX=72); add live runtime section: Python version, platform, install method, active server, library count, active streams; blank spacer rows between sections |
 | v0.0.38 | Restore About screen right border — `_vlen()` strips ANSI codes before padding calc; `pad = BOX - 4 - vlen(inner)` keeps both `│` borders perfectly aligned |
 | v0.0.37 | Fix About screen alignment — drop right-border box (ANSI codes break `len()` padding); use left-border style so description lines never overflow |
 | v0.0.36 | Fix self-update for pip/pipx — replace broken `pip install --upgrade git+...` with direct GitHub Raw download that overwrites the running script in-place |

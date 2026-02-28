@@ -70,7 +70,7 @@ GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 # This is the authoritative version source.  It is always correct in all
 # install modes (git clone, pip/pipx, Docker) regardless of whether the
 # local versions.json data file has been synced yet.
-APP_VERSION        = "0.0.38"
+APP_VERSION        = "0.0.39"
 UPDATE_FILES       = [
     "plex_menu.py",
     "movie_db_scan.py",
@@ -3698,10 +3698,10 @@ def about_menu():
     # Visible row  = 2 + 1 + 1 + vlen(inner) + pad + 1 + 1 = 6 + vlen(inner) + pad
     # Separator    = 2 + BOX
     # Match when:  pad = BOX - 4 - vlen(inner)
-    BOX  = 58
+    BOX  = 72
     SEP  = blue("─" * BOX)
     SIDE = blue("│")
-    LW   = 14   # label column width
+    LW   = 16   # label column width
 
     def row(label: str, value: str, val_color=white) -> str:
         inner = f"{yellow(f'{label:<{LW}}')}{val_color(value)}"
@@ -3709,31 +3709,51 @@ def about_menu():
         return f"  {SIDE} {inner}{' ' * pad} {SIDE}"
 
     def row2(value: str) -> str:
+        """Continuation / description wrap line (value indented under label column)."""
         inner = f"{' ' * LW}{white(value)}"
         pad   = max(BOX - 4 - _vlen(inner), 0)
         return f"  {SIDE} {inner}{' ' * pad} {SIDE}"
 
-    # Description split to ≤ 38 chars so each line fits inside BOX=58 / LW=14
-    desc1 = "Python CLI for managing multiple Plex"
-    desc2 = "Media Server instances via the Plex"
-    desc3 = "HTTP API. Colorized terminal menus,"
-    desc4 = "no web UI, no config files to edit."
+    def blank() -> str:
+        """Empty row — just the two borders."""
+        return f"  {SIDE} {' ' * (BOX - 4)} {SIDE}"
+
+    # System / runtime info
+    py_ver  = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    plat    = f"{platform.system()} {platform.release()}"
+    method  = _detect_install_method().upper()
+    srv     = ACTIVE.get("name", "Not connected") or "Not connected"
+    libs    = str(ACTIVE.get("lib_count", 0))
+    streams = str(get_active_stream_count())
+
+    # Description — max 52 visible chars each to fit BOX=72 / LW=16
+    desc1 = "Python CLI for managing multiple Plex Media Server"
+    desc2 = "instances via the Plex HTTP API. Colorized terminal"
+    desc3 = "menus — no web UI, no config files to hand-edit."
 
     print("\n" + divider())
     print(header("  ℹ️   ABOUT — PLEX API MANAGER"))
     print(divider())
     print(f"  {SEP}")
-    print(row("Title:",        "Plex API Manager"))
-    print(row("Author(s):",    "trickdaddy24 / Claude (AI Assistant)"))
-    print(row("Revised:",      rev_dt))
-    print(row("Description:",  desc1))
+    print(row("Title:",          "Plex API Manager"))
+    print(row("Author(s):",      "trickdaddy24 / Claude (AI Assistant)"))
+    print(row("Revised:",        rev_dt))
+    print(row("Description:",    desc1))
     print(row2(desc2))
     print(row2(desc3))
-    print(row2(desc4))
-    print(row("Version:",      f"v{APP_VERSION}", green))
-    print(row("Entry Point:",  "python plex_menu.py", cyan))
-    print(row("GitHub:",       f"github.com/{GITHUB_REPO}", cyan))
-    print(row("License:",      "No License"))
+    print(blank())
+    print(row("Version:",        f"v{APP_VERSION}",            green))
+    print(row("Entry Point:",    "python plex_menu.py",        cyan))
+    print(row("GitHub:",         f"github.com/{GITHUB_REPO}",  cyan))
+    print(row("License:",        "No License"))
+    print(blank())
+    print(row("Python:",         py_ver))
+    print(row("Platform:",       plat))
+    print(row("Install Method:", method))
+    print(blank())
+    print(row("Active Server:",  srv,     green))
+    print(row("Libraries:",      libs))
+    print(row("Active Streams:", streams, yellow if int(streams) > 0 else white))
     print(f"  {SEP}")
     print(divider())
     input(f"  {cyan('Press Enter to return to Main Menu...')}")
