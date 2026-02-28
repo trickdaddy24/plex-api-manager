@@ -63,6 +63,15 @@ MOVIE_DB_LOG_DIR   = LOG_DIR / "movie_db"
 MOVIE_DB_TASK_NAME = "PlexMovieDBScan"
 TMDB_DAILY_LIMIT   = 1000
 MAX_SERVERS        = 10
+GITHUB_REPO        = "trickdaddy24/plex-api-manager"
+GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
+UPDATE_FILES       = [
+    "plex_menu.py",
+    "movie_db_scan.py",
+    "heartbeat_scheduler.py",
+    "system_info_notify.py",
+    "versions.json",
+]
 
 # ─────────────────────────────────────────
 #  LOGGING SETUP
@@ -152,6 +161,177 @@ def suggest_next_version():
         return ".".join(parts)
     except Exception:
         return last
+
+# ─────────────────────────────────────────
+#  SELF-UPDATE SYSTEM
+# ─────────────────────────────────────────
+def _version_tuple(v):
+    """Convert '0.0.27' → (0, 0, 27) for comparison."""
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except Exception:
+        return (0, 0, 0)
+
+def _detect_install_method():
+    """Return 'git', 'pip', or 'raw' based on how the app was installed."""
+    import shutil as _shutil
+    if (BASE_DIR / ".git").exists():
+        return "git"
+    if _shutil.which("plex-manager"):
+        return "pip"
+    return "raw"
+
+def check_for_updates(silent=False):
+    """
+    Fetch versions.json from GitHub and compare to local version.
+    Returns dict with update info if update is available, else None.
+    """
+    try:
+        res = requests.get(f"{GITHUB_RAW_BASE}/versions.json", timeout=5)
+        res.raise_for_status()
+        remote_versions = res.json()
+        if not remote_versions:
+            return None
+        remote_latest = remote_versions[-1]
+        remote_ver    = remote_latest["version"]
+        local_ver     = get_app_version()
+        if _version_tuple(remote_ver) > _version_tuple(local_ver):
+            new_entries = [v for v in remote_versions if _version_tuple(v["version"]) > _version_tuple(local_ver)]
+            return {
+                "local":        local_ver,
+                "remote":       remote_ver,
+                "remote_notes": remote_latest["notes"],
+                "remote_date":  remote_latest["date"],
+                "all_new":      new_entries,
+            }
+        return None
+    except Exception as e:
+        if not silent:
+            log.warning(f"Update check failed: {e}")
+        return None
+
+def perform_update(update_info):
+    """
+    Download and apply the latest version from GitHub.
+    Backs up current files to old/ before replacing.
+    Offers to restart after a successful update.
+    """
+    import shutil as _shutil
+    local_ver  = update_info["local"]
+    remote_ver = update_info["remote"]
+    method     = _detect_install_method()
+
+    print(f"\n{header('  🔄  UPDATING TO v' + remote_ver)}\n" + divider("-", 52))
+    print(f"  {white('Install method:')} {cyan(method)}")
+    print(f"  {white('Current version:')} {yellow('v' + local_ver)}")
+    print(f"  {white('New version:')}     {green('v' + remote_ver)}")
+
+    # ── Changelog for all new versions ──────────────────────
+    if update_info.get("all_new"):
+        print(f"\n  {white('What changed:')}")
+        for v in update_info["all_new"]:
+            print(f"    {green('v' + v['version'])}  {blue(v['date'])}  {white(v['notes'])}")
+
+    # ── Backup current files ─────────────────────────────────
+    print(f"\n  {white('Backing up current files...')}")
+    backup_dir = BASE_DIR / "old"
+    backup_dir.mkdir(exist_ok=True)
+    ts         = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backed_up  = []
+    for fname in UPDATE_FILES:
+        src = BASE_DIR / fname
+        if src.exists():
+            dst = backup_dir / f"{src.stem}_v{local_ver}_{ts}{src.suffix}"
+            try:
+                _shutil.copy2(src, dst)
+                backed_up.append(dst.name)
+            except Exception as e:
+                log.warning(f"Backup failed for {fname}: {e}")
+    if backed_up:
+        print(f"  {green('✅ Backed up')} {yellow(str(len(backed_up)))} file(s) to {blue('old/')}")
+
+    # ── Apply update ─────────────────────────────────────────
+    success = False
+    print(divider("-", 52))
+
+    if method == "git":
+        try:
+            result = subprocess.run(
+                ["git", "pull", "origin", "main"],
+                capture_output=True, text=True, cwd=str(BASE_DIR),
+            )
+            if result.returncode == 0:
+                print(green(f"  ✅ git pull succeeded."))
+                log.info(f"Updated via git pull: v{local_ver} → v{remote_ver}")
+                success = True
+            else:
+                print(red(f"  ❌ git pull failed:\n{result.stderr.strip()}"))
+                log.error(f"git pull failed: {result.stderr.strip()}")
+        except Exception as e:
+            print(red(f"  ❌ git error: {e}"))
+            log.error(f"Update git error: {e}")
+
+    elif method == "pip":
+        try:
+            result = subprocess.run(
+                [sys.executable, "-m", "pip", "install", "--upgrade",
+                 f"git+https://github.com/{GITHUB_REPO}.git"],
+                capture_output=True, text=True,
+            )
+            if result.returncode == 0:
+                print(green("  ✅ pip upgrade succeeded."))
+                log.info(f"Updated via pip: v{local_ver} → v{remote_ver}")
+                success = True
+            else:
+                print(red("  ❌ pip upgrade failed."))
+                log.error(f"pip upgrade failed: {result.stderr.strip()}")
+        except Exception as e:
+            print(red(f"  ❌ pip error: {e}"))
+            log.error(f"Update pip error: {e}")
+
+    else:
+        # Raw file download — write to .tmp then move
+        all_ok = True
+        for fname in UPDATE_FILES:
+            url = f"{GITHUB_RAW_BASE}/{fname}"
+            dst = BASE_DIR / fname
+            tmp = dst.with_suffix(".update_tmp")
+            try:
+                res = requests.get(url, timeout=15)
+                res.raise_for_status()
+                tmp.write_bytes(res.content)
+                _shutil.move(str(tmp), str(dst))
+                print(f"  {green('✅')} {white(fname)}")
+                log.info(f"Downloaded update: {fname}")
+            except Exception as e:
+                if tmp.exists():
+                    tmp.unlink()
+                print(red(f"  ❌ {fname}: {e}"))
+                log.error(f"Update download failed: {fname}: {e}")
+                all_ok = False
+        success = all_ok
+
+    # ── Post-update ──────────────────────────────────────────
+    if success:
+        print(f"\n  {green('✅ Update complete!')}  {yellow('v'+local_ver)} → {green('v'+remote_ver)}")
+        log.info(f"Update applied: v{local_ver} → v{remote_ver} ({method})")
+        notify_discord(
+            f"🆙 **App Updated Successfully**\n\n"
+            f"📦 `v{local_ver}` → `v{remote_ver}`\n"
+            f"📝 {update_info['remote_notes']}\n"
+            f"🔄 Method: `{method}`",
+            title="🆙 Plex Manager Updated", color=0x57F287,
+        )
+        restart = input(f"\n  {cyan('Restart now to apply changes? (y/n)')}: ").strip().lower()
+        if restart == "y":
+            print(yellow("  Restarting..."))
+            log.info("Restarting after update.")
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+    else:
+        print(red("\n  ❌ Update failed. Original files are backed up in old/ and unchanged."))
+        log.error(f"Update failed: v{local_ver} → v{remote_ver} ({method})")
+
+    return success
 
 # ─────────────────────────────────────────
 #  MULTI-SERVER MANAGEMENT
@@ -504,6 +684,13 @@ def startup_servers():
         color=0x57F287
     )
 
+    # Silent update check — notify if update is available, don't block startup
+    update = check_for_updates(silent=True)
+    if update:
+        print(f"\n  {yellow('💡 Update available:')}  {white('v'+update['local'])} → {green('v'+update['remote'])}")
+        print(f"     {white(update['remote_notes'])}")
+        print(f"     {blue('Go to Version Manager [6] → [5] Check for Updates')}\n")
+
 # ─────────────────────────────────────────
 #  VERSION MANAGER MENU
 # ─────────────────────────────────────────
@@ -518,6 +705,8 @@ def version_menu():
         print(f"  {yellow('[2]')}  {white('Add New Version Entry')}")
         print(f"  {yellow('[3]')}  {white('Edit Existing Version')}")
         print(f"  {yellow('[4]')}  {white('Track / Snapshot to Log & Discord')}")
+        print(divider("-", 52))
+        print(f"  {green('[5]')}  {white('Check for Updates / Update Now')}")
         print(f"  {red('[0]')}  {white('Back to Main Menu')}")
         print(divider())
         choice = input(f"  {cyan('Select an option')}: ").strip()
@@ -598,6 +787,26 @@ def version_menu():
             log.info("=== END SNAPSHOT ===")
             notify_discord("\n".join(lines), title=f"📋 Version Snapshot — App v{app_ver}", color=0xFEE75C)
             print(green(f"  ✅ Snapshot written to plex.log and Discord  |  App v{cyan(app_ver)}"))
+
+        elif choice == "5":
+            print(f"\n  {cyan('🔍 Checking for updates...')}")
+            update = check_for_updates(silent=False)
+            if not update:
+                print(green(f"  ✅ You are on the latest version (v{get_app_version()})."))
+            else:
+                print(f"\n{header('  🆙  UPDATE AVAILABLE')}\n" + divider("-", 52))
+                print(f"  {white('Current:')} {yellow('v' + update['local'])}")
+                print(f"  {white('Latest:')}  {green('v' + update['remote'])}  {blue(update['remote_date'])}")
+                print(f"\n  {white('What changed:')}")
+                for v in update.get("all_new", []):
+                    print(f"    {green('v' + v['version'])}  {blue(v['date'])}")
+                    print(f"    {white(v['notes'])}")
+                print(divider("-", 52))
+                confirm = input(f"\n  {cyan('Update now? (y/n)')}: ").strip().lower()
+                if confirm == "y":
+                    perform_update(update)
+                else:
+                    print(yellow("  Update skipped."))
 
         else:
             print(red("  ⚠️  Invalid option."))

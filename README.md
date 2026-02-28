@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.27`
+**Current version:** `v0.0.28`
 
 ---
 
@@ -17,6 +17,7 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 - **Watchlist / Favorites** — track items you want to watch, export in multiple formats
 - **Movie Search List** — search TMDB, auto-fill metadata (title, year, IMDB/RT ratings, runtime, MPAA rating), assign internal IDs (ms000001), and send directly to Radarr
 - **Movie Database** — bulk-enriches your entire Plex movie library with TMDB + OMDB metadata; respects 1000-call/day quota with automatic scheduler continuation; searchable local JSON; add any result to your Movie Search List; dedicated `logs/movie_db/` log folder
+- **Self-update** — checks GitHub for updates on every startup; update via Version Manager `[6] → [5]`; backs up current files to `old/` before replacing; restarts in-place after update; supports git pull, pip upgrade, and raw file download
 - **Discord notifications** — rich embeds on startup, server switch, library list, version adds, and stream kills
 - **System info on startup** — OS version, external public IP, and active stream count sent to Discord automatically
 - **Daily heartbeat** — cross-platform scheduler fires once daily at a random time between 00:00–11:59, self-rescheduling after each run
@@ -184,6 +185,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.28 | Add self-update system — startup check, Version Manager [5], git/pip/raw download, backup to old/, in-place restart, Discord notify |
 | v0.0.27 | Add Movie Database — enriches all Plex movies with TMDB/OMDB, 1000/day quota, scheduler continuation, Discord notifications, dedicated log folder |
 | v0.0.26 | Add Movie Search List (option 9) — TMDB search, OMDB ratings, ms000001 IDs, Radarr API send |
 | v0.0.25 | Fix pyproject.toml build backend — use setuptools.build_meta for broader compatibility |
