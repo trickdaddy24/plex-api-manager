@@ -1,10 +1,10 @@
 [build-system]
 requires = ["setuptools>=61"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "plex-api-manager"
-version = "0.0.21"
+version = "0.0.25"
 description = "Multi-server Plex CLI with Discord notifications and heartbeat scheduler"
 readme = "README.md"
 requires-python = ">=3.8"

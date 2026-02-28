@@ -118,5 +118,10 @@
     "version": "0.0.24",
     "date": "2026-02-28",
     "notes": "fix install.sh for Ubuntu 24.04 PEP 668 — switch from pip3 to pipx for isolated venv install"
+  },
+  {
+    "version": "0.0.25",
+    "date": "2026-02-28",
+    "notes": "fix pyproject.toml build backend — switch from setuptools.backends.legacy to setuptools.build_meta for broader compatibility"
   }
 ]
