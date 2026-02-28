@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────
+#  Plex API Manager — Docker Compose
+#
+#  Interactive CLI:
+#    docker compose run --rm plex-manager
+#
+#  Run movie DB enrichment scan (one-shot):
+#    docker compose run --rm movie-db-scan
+#
+#  Send heartbeat to Discord (one-shot):
+#    docker compose run --rm heartbeat
+#
+#  Data lives in ./data/ on the host — edit config files there.
+# ─────────────────────────────────────────
+
+services:
+
+  # ── Interactive CLI ──────────────────────────────────────────────────────────
+  plex-manager:
+    build: .
+    image: plex-manager:latest
+    container_name: plex-manager
+    stdin_open: true   # keep STDIN open (-i)
+    tty: true          # allocate a TTY (-t)
+    volumes:
+      - ./data:/data
+    environment:
+      - PLEX_MANAGER_HOME=/data
+    restart: "no"
+
+  # ── Movie DB enrichment scan (run on demand or via host scheduler) ───────────
+  movie-db-scan:
+    build: .
+    image: plex-manager:latest
+    container_name: plex-movie-db-scan
+    volumes:
+      - ./data:/data
+    environment:
+      - PLEX_MANAGER_HOME=/data
+    command: ["python", "movie_db_scan.py"]
+    restart: "no"
+    profiles: ["scan"]
+
+  # ── Movie DB scan status ─────────────────────────────────────────────────────
+  movie-db-status:
+    build: .
+    image: plex-manager:latest
+    container_name: plex-movie-db-status
+    volumes:
+      - ./data:/data
+    environment:
+      - PLEX_MANAGER_HOME=/data
+    command: ["python", "movie_db_scan.py", "--status"]
+    restart: "no"
+    profiles: ["scan"]
+
+  # ── Send heartbeat / system info to Discord (one-shot) ──────────────────────
+  heartbeat:
+    build: .
+    image: plex-manager:latest
+    container_name: plex-heartbeat
+    volumes:
+      - ./data:/data
+    environment:
+      - PLEX_MANAGER_HOME=/data
+    command: ["python", "system_info_notify.py"]
+    restart: "no"
+    profiles: ["heartbeat"]

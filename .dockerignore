@@ -1,0 +1,56 @@
+# ─────────────────────────────────────────
+#  Plex API Manager — .dockerignore
+#
+#  Keeps the Docker build context lean by excluding
+#  user data, secrets, caches, and dev artifacts.
+# ─────────────────────────────────────────
+
+# User secrets and server config (never bake into image)
+plex_servers.json
+plex_creds.json
+discord_creds.json
+api_keys.json
+radarr_creds.json
+heartbeat.json
+
+# Generated / user data
+data/
+library_cache/
+watchlist_exports/
+watchlist.json
+movie_list.json
+movie_db.json
+movie_db_progress.json
+old/
+
+# Logs
+logs/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Git
+.git/
+.gitignore
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Diff / snapshot files
+*_DIFF_*.json

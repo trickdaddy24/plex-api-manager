@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.28`
+**Current version:** `v0.0.29`
 
 ---
 
@@ -58,6 +58,17 @@ python plex_menu.py
 ```
 
 Data files stay in the cloned directory.
+
+### Option C — Docker
+
+```bash
+git clone https://github.com/trickdaddy24/plex-api-manager.git
+cd plex-api-manager
+docker compose build
+docker compose run --rm plex-manager
+```
+
+All user data (config, logs, cache, exports) is stored in `./data/` on the host — nothing is baked into the image.
 
 ---
 
@@ -153,6 +164,51 @@ plex-scheduler --remove   # remove the task entirely
 
 ---
 
+## Docker
+
+A full Docker setup is included. All user data lives in `./data/` on the host via a bind mount — the image itself contains no secrets.
+
+### Build
+
+```bash
+docker compose build
+```
+
+### Interactive CLI
+
+```bash
+docker compose run --rm plex-manager
+```
+
+### Movie DB enrichment scan (one-shot)
+
+```bash
+docker compose run --rm --profile scan movie-db-scan
+```
+
+### Movie DB scan status
+
+```bash
+docker compose run --rm --profile scan movie-db-status
+```
+
+### Send heartbeat to Discord (one-shot)
+
+```bash
+docker compose run --rm --profile heartbeat heartbeat
+```
+
+### First-time Docker setup
+
+On the very first run the entrypoint automatically:
+1. Creates `./data/logs/movie_db/`, `./data/library_cache/`, `./data/watchlist_exports/`, `./data/old/`
+2. Seeds `./data/versions.json` from the bundled default
+3. Seeds `./data/plex_servers.json` from `plex_servers.example.json`
+
+Then edit `./data/plex_servers.json` with your Plex URL and token before launching.
+
+---
+
 ## Library Cache & Diff
 
 **Menu → 2 → Search My Library** includes options to:
@@ -166,14 +222,20 @@ plex-scheduler --remove   # remove the task entirely
 
 ```
 plex_menu.py              # Main script — everything lives here
+movie_db_scan.py          # Standalone movie DB enrichment scan
 system_info_notify.py     # Standalone heartbeat — OS, IP, streams → Discord
 heartbeat_scheduler.py    # Cross-platform scheduler (Windows/Linux)
 pyproject.toml            # pip package definition + entry points
 install.sh                # Ubuntu one-liner installer
+Dockerfile                # Docker image definition
+docker-compose.yml        # Docker Compose services
+docker-entrypoint.sh      # Container entrypoint — seeds /data on first run
+.dockerignore             # Excludes secrets and caches from build context
 plex_servers.example.json # Server config template
 versions.json             # Changelog / version history
 watchlist.json            # Saved watchlist items
 CLAUDE.md                 # Project context for Claude Code
+data/                     # Docker bind-mount target (host-side user data)
 library_cache/            # Per-library metadata snapshots (gitignored)
 watchlist_exports/        # Exported watchlist files (gitignored)
 logs/plex.log             # Log file (gitignored)
@@ -185,6 +247,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.29 | Add Docker support — Dockerfile, docker-compose.yml, docker-entrypoint.sh, .dockerignore; data volume at ./data/; profiles for scan and heartbeat |
 | v0.0.28 | Add self-update system — startup check, Version Manager [5], git/pip/raw download, backup to old/, in-place restart, Discord notify |
 | v0.0.27 | Add Movie Database — enriches all Plex movies with TMDB/OMDB, 1000/day quota, scheduler continuation, Discord notifications, dedicated log folder |
 | v0.0.26 | Add Movie Search List (option 9) — TMDB search, OMDB ratings, ms000001 IDs, Radarr API send |
