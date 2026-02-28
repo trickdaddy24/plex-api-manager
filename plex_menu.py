@@ -70,7 +70,7 @@ GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 # This is the authoritative version source.  It is always correct in all
 # install modes (git clone, pip/pipx, Docker) regardless of whether the
 # local versions.json data file has been synced yet.
-APP_VERSION        = "0.0.36"
+APP_VERSION        = "0.0.37"
 UPDATE_FILES       = [
     "plex_menu.py",
     "movie_db_scan.py",
@@ -3687,27 +3687,18 @@ def about_menu():
     except Exception:
         rev_dt = rev_raw
 
-    BOX  = 65                   # total inner width of the info block
-    SEP  = blue("─" * BOX)
+    # Left-border style — no right │ so ANSI codes never break alignment
+    SEP  = blue("─" * 52)
     SIDE = blue("│")
+    LW   = 14   # label column width
 
     def row(label: str, value: str, val_color=white) -> str:
-        """One labelled row inside the box."""
-        lbl  = f"  {yellow(f'{label:<16}')}"
-        val  = val_color(value)
-        # Raw lengths for padding (strip ANSI for count)
-        raw  = f"  {label:<16}  {value}"
-        pad  = BOX - len(raw) - 1
-        pad  = max(pad, 0)
-        return f"  {SIDE} {lbl}  {val}{' ' * pad} {SIDE}"
+        """  │  Label         value"""
+        return f"  {SIDE}  {yellow(f'{label:<{LW}}')}{val_color(value)}"
 
     def row2(value: str) -> str:
-        """Continuation line (no label) for wrapped description."""
-        indent = " " * 18
-        raw    = f"  {indent}  {value}"
-        pad    = BOX - len(raw) - 1
-        pad    = max(pad, 0)
-        return f"  {SIDE}   {white(indent + value)}{' ' * pad} {SIDE}"
+        """  │  (indent)      continuation value"""
+        return f"  {SIDE}  {' ' * LW}{white(value)}"
 
     desc1 = "Python CLI for managing multiple Plex Media Server"
     desc2 = "instances via the Plex HTTP API. Colorized terminal"
