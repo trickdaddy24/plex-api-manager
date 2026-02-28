@@ -163,5 +163,10 @@
     "version": "0.0.33",
     "date": "2026-02-28",
     "notes": "overhaul self-update system — _PENDING_UPDATE global, 1hr check cache, skip-version and auto_check prefs in update_prefs.json, [U] shortcut in main menu, changelog before confirm, Version Manager [6] Update Settings submenu"
+  },
+  {
+    "version": "0.0.34",
+    "date": "2026-02-28",
+    "notes": "fix pip/pipx version display — embed APP_VERSION constant as authoritative version source; add _sync_versions_file_from_github() to auto-update stale data file on startup; sync versions.json after pip upgrade in perform_update()"
   }
 ]

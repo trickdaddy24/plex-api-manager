@@ -11,15 +11,24 @@ A Python CLI tool that manages multiple Plex Media Server instances via the Plex
 
 ## Commit Workflow — ALWAYS follow this order
 
-Every time code changes are made and pushed to GitHub, all three of these must be updated in the same commit:
+Every time code changes are made and pushed to GitHub, **all four** of these must be updated in the same commit:
 
 1. **`versions.json`** — add a new entry for the change (next patch version, today's date, short note)
 2. **`README.md`** — bump `Current version:` and add a row to the Version History table
-3. **`plex_menu.py`** (or whichever file changed) — the actual code
+3. **`plex_menu.py`** — bump `APP_VERSION = "x.x.x"` near the top of the constants block to match the new version
+4. **`plex_menu.py`** (or whichever file changed) — the actual code change
 
-Never commit code changes without updating `versions.json` and `README.md` in the same commit.
+### Why APP_VERSION matters
 
-**Current version:** `v0.0.20`
+`APP_VERSION` is the **embedded authoritative version** in the script. It is returned by `get_app_version()` and is always correct in all install modes (git clone, pip/pipx, Docker) regardless of whether the local `versions.json` data file has been synced yet.
+
+In pip/pipx mode, `~/.plex-manager/versions.json` is a user data file seeded at first install — pip upgrades update the script but NOT this file. Without `APP_VERSION`, the app would display `v0.0.1` after every pip upgrade until the data file was manually synced.
+
+`_sync_versions_file_from_github()` uses `APP_VERSION` as the floor to detect a stale `versions.json` and silently updates it from GitHub on startup.
+
+**Never commit without bumping APP_VERSION — it is the single source of truth for the app version.**
+
+**Current version:** `v0.0.34`
 
 ---
 

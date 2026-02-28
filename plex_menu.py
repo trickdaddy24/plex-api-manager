@@ -66,6 +66,11 @@ MAX_SERVERS        = 10
 THEME_FILE         = BASE_DIR / "theme.json"
 GITHUB_REPO        = "trickdaddy24/plex-api-manager"
 GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
+# ── Embedded version — MUST be bumped on every release commit ────────────────
+# This is the authoritative version source.  It is always correct in all
+# install modes (git clone, pip/pipx, Docker) regardless of whether the
+# local versions.json data file has been synced yet.
+APP_VERSION        = "0.0.34"
 UPDATE_FILES       = [
     "plex_menu.py",
     "movie_db_scan.py",
@@ -344,21 +349,60 @@ def save_versions(data):
     with open(VERSIONS_FILE, "w") as f:
         json.dump(data, f, indent=2)
 
-def get_app_version():
-    versions = load_versions()
-    return versions[-1]["version"] if versions else "0.0.1"
+def _sync_versions_file_from_github():
+    """
+    Silently download versions.json from GitHub and save it locally when the
+    local copy is behind APP_VERSION.
 
-def suggest_next_version():
-    versions = load_versions()
-    if not versions:
-        return "0.0.2"
-    last = versions[-1]["version"]
+    This fixes the pip/pipx install mode where the data file in
+    ~/.plex-manager/versions.json was seeded at first install time and never
+    updated by subsequent pip upgrades (pip only replaces script files, not
+    user data files).
+
+    Called once at startup — safe to fail silently.
+    """
     try:
-        parts = last.split(".")
+        local_vers = load_versions()
+        local_last = local_vers[-1]["version"] if local_vers else "0.0.1"
+        # Only fetch if local changelog is behind the embedded version
+        if _version_tuple(local_last) >= _version_tuple(APP_VERSION):
+            return
+        res = requests.get(f"{GITHUB_RAW_BASE}/versions.json", timeout=3)
+        res.raise_for_status()
+        remote_versions = res.json()
+        if not remote_versions:
+            return
+        remote_last = remote_versions[-1]["version"]
+        # Only overwrite if remote is at least as new as the embedded version
+        if _version_tuple(remote_last) >= _version_tuple(APP_VERSION):
+            save_versions(remote_versions)
+            log.info(f"versions.json synced from GitHub: v{local_last} → v{remote_last}")
+    except Exception:
+        pass   # always silent — never block startup
+
+def get_app_version() -> str:
+    """
+    Return the current app version.
+    APP_VERSION (embedded constant) is always the authoritative source —
+    it is correct in all install modes even when the local versions.json
+    data file hasn't been synced yet (e.g. fresh pip install).
+    """
+    return APP_VERSION
+
+def suggest_next_version() -> str:
+    """Auto-increment the patch number for the next release."""
+    versions = load_versions()
+    # Use the higher of: last changelog entry OR the embedded APP_VERSION,
+    # so the suggestion is always ahead of the real current release.
+    last_str = versions[-1]["version"] if versions else APP_VERSION
+    if _version_tuple(APP_VERSION) > _version_tuple(last_str):
+        last_str = APP_VERSION
+    try:
+        parts = last_str.split(".")
         parts[-1] = str(int(parts[-1]) + 1)
         return ".".join(parts)
     except Exception:
-        return last
+        return last_str
 
 # ─────────────────────────────────────────
 #  SELF-UPDATE SYSTEM
@@ -594,6 +638,16 @@ def perform_update(update_info: dict):
                 print(green("  ✅ pip upgrade succeeded."))
                 log.info(f"Updated via pip: v{local_ver} → v{remote_ver}")
                 success = True
+                # pip replaces script files only — explicitly sync the changelog
+                # data file so get_app_version() / version history are current
+                try:
+                    vr = requests.get(f"{GITHUB_RAW_BASE}/versions.json", timeout=10)
+                    vr.raise_for_status()
+                    (BASE_DIR / "versions.json").write_text(vr.text, encoding="utf-8")
+                    print(f"  {green('✅')} {white('versions.json synced')}")
+                    log.info("versions.json synced after pip upgrade")
+                except Exception as ve:
+                    log.warning(f"versions.json sync after pip upgrade failed: {ve}")
             else:
                 print(red("  ❌ pip upgrade failed."))
                 log.error(f"pip upgrade failed: {result.stderr.strip()}")
@@ -994,6 +1048,9 @@ def startup_servers():
         title=f"🎬 Plex Manager Started — {ACTIVE['name']}",
         color=0x57F287
     )
+
+    # Sync versions.json from GitHub if local copy is stale (pip install mode)
+    _sync_versions_file_from_github()
 
     # Silent update check — result stored in _PENDING_UPDATE for menu banner
     _startup_update_check()
