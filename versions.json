@@ -78,5 +78,15 @@
     "version": "0.0.16",
     "date": "2026-02-28",
     "notes": "show active stream count in startup Discord notification"
+  },
+  {
+    "version": "0.0.17",
+    "date": "2026-02-28",
+    "notes": "added get.active.stream.count to discord"
+  },
+  {
+    "version": "0.0.18",
+    "date": "2026-02-28",
+    "notes": "moved system info notify into discord settings menu option 4, removed standalone py"
   }
 ]

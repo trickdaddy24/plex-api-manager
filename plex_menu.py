@@ -602,6 +602,7 @@ def discord_settings_menu():
         print(f"  {yellow('[1]')}  {white('Set / Update Webhook URL')}")
         print(f"  {yellow('[2]')}  {white('Send Test Notification')}")
         print(f"  {yellow('[3]')}  {white('Remove Webhook')}")
+        print(f"  {yellow('[4]')}  {white('Send System Info')}  {blue('(OS · IP · Active Streams)')}")
         print(f"  {red('[0]')}  {white('Back')}")
         print(divider())
         choice = input(f"  {cyan('Select an option')}: ").strip()
@@ -627,6 +628,21 @@ def discord_settings_menu():
                 DISCORD_FILE.unlink()
                 log.info("Discord webhook removed.")
             print(yellow("  Webhook removed."))
+        elif choice == "4":
+            print(yellow("  🔍 Gathering system info..."))
+            sysinfo      = get_system_info()
+            stream_count = get_active_stream_count()
+            log.info(f"System info requested — OS: {sysinfo['os']} | IP: {sysinfo['ip']} | Streams: {stream_count}")
+            print(f"  {white('OS:')}      {cyan(sysinfo['os'])}")
+            print(f"  {white('IP:')}      {cyan(sysinfo['ip'])}")
+            print(f"  {white('Streams:')} {cyan(str(stream_count))}")
+            notify_discord(
+                f"🖥️ OS: `{sysinfo['os']}`\n"
+                f"🌐 IP: `{sysinfo['ip']}`\n"
+                f"▶️ Active streams: `{stream_count}`",
+                title="🖥️ System Info", color=0x5865F2
+            )
+            print(green("  ✅ System info sent to Discord!"))
         else:
             print(red("  ⚠️  Invalid option."))
 
