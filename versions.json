@@ -148,5 +148,10 @@
     "version": "0.0.30",
     "date": "2026-02-28",
     "notes": "docker-compose.yml — add port mapping 9998:9991 to plex-manager service"
+  },
+  {
+    "version": "0.0.31",
+    "date": "2026-02-28",
+    "notes": "add color theme system — 10 presets (Plex Classic, Midnight, Hacker, Sunset, Neon, Dracula, Monochrome, Ocean, Amber, Cherry) + custom role editor; [T] in main menu; saved to theme.json"
   }
 ]

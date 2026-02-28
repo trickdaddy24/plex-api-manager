@@ -63,6 +63,7 @@ MOVIE_DB_LOG_DIR   = LOG_DIR / "movie_db"
 MOVIE_DB_TASK_NAME = "PlexMovieDBScan"
 TMDB_DAILY_LIMIT   = 1000
 MAX_SERVERS        = 10
+THEME_FILE         = BASE_DIR / "theme.json"
 GITHUB_REPO        = "trickdaddy24/plex-api-manager"
 GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 UPDATE_FILES       = [
@@ -88,18 +89,213 @@ logging.basicConfig(
 log = logging.getLogger("plex")
 
 # ─────────────────────────────────────────
-#  COLOR HELPERS
+#  COLOR HELPERS  (theme-driven)
 # ─────────────────────────────────────────
+# Active ANSI codes for each UI role — populated by apply_theme().
+# Defaults here = "Plex Classic" so color works before apply_theme() runs.
+THEME: dict = {
+    "primary":   Fore.CYAN,
+    "secondary": Fore.YELLOW,
+    "success":   Fore.GREEN,
+    "danger":    Fore.RED,
+    "accent":    Fore.MAGENTA,
+    "info":      Fore.BLUE,
+    "muted":     Fore.WHITE,
+    "header":    Fore.CYAN  + Style.BRIGHT,
+    "divider":   Fore.BLUE  + Style.BRIGHT,
+}
+
 def c(text, color):          return f"{color}{text}{Style.RESET_ALL}"
-def cyan(t):                 return c(t, Fore.CYAN)
-def yellow(t):               return c(t, Fore.YELLOW)
-def green(t):                return c(t, Fore.GREEN)
-def red(t):                  return c(t, Fore.RED)
-def magenta(t):              return c(t, Fore.MAGENTA)
-def blue(t):                 return c(t, Fore.BLUE)
-def white(t):                return c(t, Fore.WHITE)
-def header(t):               return c(t, Fore.CYAN + Style.BRIGHT)
-def divider(char="═", n=52): return c(char * n, Fore.BLUE + Style.BRIGHT)
+def cyan(t):                 return c(t, THEME["primary"])
+def yellow(t):               return c(t, THEME["secondary"])
+def green(t):                return c(t, THEME["success"])
+def red(t):                  return c(t, THEME["danger"])
+def magenta(t):              return c(t, THEME["accent"])
+def blue(t):                 return c(t, THEME["info"])
+def white(t):                return c(t, THEME["muted"])
+def header(t):               return c(t, THEME["header"])
+def divider(char="═", n=52): return c(char * n, THEME["divider"])
+
+# ─────────────────────────────────────────
+#  THEME SYSTEM
+# ─────────────────────────────────────────
+# All available foreground codes keyed by a JSON-safe name
+_FORE = {
+    "black":          Fore.BLACK,
+    "red":            Fore.RED,
+    "green":          Fore.GREEN,
+    "yellow":         Fore.YELLOW,
+    "blue":           Fore.BLUE,
+    "magenta":        Fore.MAGENTA,
+    "cyan":           Fore.CYAN,
+    "white":          Fore.WHITE,
+    "bright_black":   Fore.LIGHTBLACK_EX,
+    "bright_red":     Fore.LIGHTRED_EX,
+    "bright_green":   Fore.LIGHTGREEN_EX,
+    "bright_yellow":  Fore.LIGHTYELLOW_EX,
+    "bright_blue":    Fore.LIGHTBLUE_EX,
+    "bright_magenta": Fore.LIGHTMAGENTA_EX,
+    "bright_cyan":    Fore.LIGHTCYAN_EX,
+    "bright_white":   Fore.LIGHTWHITE_EX,
+}
+
+# Each role maps to (color_name: str, bold: bool)
+COLOR_PRESETS = {
+    "Plex Classic": {                           # 1 — default cyan/yellow
+        "primary":   ("cyan",           False),
+        "secondary": ("yellow",         False),
+        "success":   ("green",          False),
+        "danger":    ("red",            False),
+        "accent":    ("magenta",        False),
+        "info":      ("blue",           False),
+        "muted":     ("white",          False),
+        "header":    ("cyan",           True),
+        "divider":   ("blue",           True),
+    },
+    "Midnight": {                               # 2 — deep blue / bright accents
+        "primary":   ("bright_blue",    False),
+        "secondary": ("cyan",           False),
+        "success":   ("bright_green",   False),
+        "danger":    ("bright_red",     False),
+        "accent":    ("bright_magenta", False),
+        "info":      ("bright_cyan",    False),
+        "muted":     ("white",          False),
+        "header":    ("bright_blue",    True),
+        "divider":   ("blue",           True),
+    },
+    "Hacker": {                                 # 3 — all green, matrix style
+        "primary":   ("green",          False),
+        "secondary": ("bright_green",   False),
+        "success":   ("bright_green",   False),
+        "danger":    ("red",            False),
+        "accent":    ("cyan",           False),
+        "info":      ("green",          True),
+        "muted":     ("green",          False),
+        "header":    ("bright_green",   True),
+        "divider":   ("green",          True),
+    },
+    "Sunset": {                                 # 4 — warm yellows and magentas
+        "primary":   ("yellow",         False),
+        "secondary": ("magenta",        False),
+        "success":   ("green",          False),
+        "danger":    ("red",            False),
+        "accent":    ("bright_yellow",  False),
+        "info":      ("bright_magenta", False),
+        "muted":     ("white",          False),
+        "header":    ("bright_yellow",  True),
+        "divider":   ("magenta",        True),
+    },
+    "Neon": {                                   # 5 — everything bright and bold
+        "primary":   ("bright_cyan",    True),
+        "secondary": ("bright_yellow",  True),
+        "success":   ("bright_green",   True),
+        "danger":    ("bright_red",     True),
+        "accent":    ("bright_magenta", True),
+        "info":      ("bright_blue",    True),
+        "muted":     ("bright_white",   False),
+        "header":    ("bright_magenta", True),
+        "divider":   ("bright_cyan",    True),
+    },
+    "Dracula": {                                # 6 — purple/pink inspired
+        "primary":   ("bright_magenta", False),
+        "secondary": ("cyan",           False),
+        "success":   ("green",          False),
+        "danger":    ("red",            False),
+        "accent":    ("yellow",         False),
+        "info":      ("blue",           False),
+        "muted":     ("white",          False),
+        "header":    ("bright_magenta", True),
+        "divider":   ("blue",           True),
+    },
+    "Monochrome": {                             # 7 — no color, white only
+        "primary":   ("white",          False),
+        "secondary": ("bright_white",   False),
+        "success":   ("white",          False),
+        "danger":    ("white",          False),
+        "accent":    ("white",          False),
+        "info":      ("white",          False),
+        "muted":     ("white",          False),
+        "header":    ("white",          True),
+        "divider":   ("white",          True),
+    },
+    "Ocean": {                                  # 8 — cyan and blue tones
+        "primary":   ("bright_cyan",    False),
+        "secondary": ("cyan",           False),
+        "success":   ("bright_green",   False),
+        "danger":    ("red",            False),
+        "accent":    ("white",          False),
+        "info":      ("blue",           False),
+        "muted":     ("white",          False),
+        "header":    ("bright_cyan",    True),
+        "divider":   ("blue",           True),
+    },
+    "Amber": {                                  # 9 — retro amber terminal
+        "primary":   ("bright_yellow",  False),
+        "secondary": ("yellow",         False),
+        "success":   ("bright_green",   False),
+        "danger":    ("red",            False),
+        "accent":    ("white",          False),
+        "info":      ("yellow",         False),
+        "muted":     ("white",          False),
+        "header":    ("bright_yellow",  True),
+        "divider":   ("yellow",         True),
+    },
+    "Cherry": {                                 # 10 — red/magenta bold
+        "primary":   ("bright_red",     False),
+        "secondary": ("magenta",        False),
+        "success":   ("green",          False),
+        "danger":    ("bright_red",     False),
+        "accent":    ("cyan",           False),
+        "info":      ("white",          False),
+        "muted":     ("white",          False),
+        "header":    ("bright_red",     True),
+        "divider":   ("magenta",        True),
+    },
+}
+
+PRESET_NAMES = list(COLOR_PRESETS.keys())   # ordered list, indices 1-10
+
+def _resolve_color(color_name: str, bold: bool) -> str:
+    """Convert a color name + bold flag to a colorama ANSI string."""
+    base = _FORE.get(color_name, Fore.WHITE)
+    return (base + Style.BRIGHT) if bold else base
+
+def load_theme() -> dict:
+    """Load theme.json; return Plex Classic defaults if missing or corrupt."""
+    if THEME_FILE.exists():
+        try:
+            with open(THEME_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"active": "Plex Classic"}
+
+def save_theme(data: dict):
+    with open(THEME_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def apply_theme():
+    """Resolve the active theme and update the global THEME dict."""
+    global THEME
+    td          = load_theme()
+    preset_name = td.get("active", "Plex Classic")
+
+    if preset_name == "Custom":
+        roles      = td.get("custom", {})
+        base       = COLOR_PRESETS["Plex Classic"]
+        schema     = {}
+        for role, default in base.items():
+            entry = roles.get(role)
+            schema[role] = tuple(entry) if (entry and len(entry) == 2) else default
+    else:
+        schema = COLOR_PRESETS.get(preset_name, COLOR_PRESETS["Plex Classic"])
+
+    THEME.clear()
+    for role, (color, bold) in schema.items():
+        THEME[role] = _resolve_color(color, bold)
+
+# Apply saved theme at module load (before any output)
+apply_theme()
 
 # ─────────────────────────────────────────
 #  SYSTEM INFO
@@ -3160,6 +3356,148 @@ def movie_list_menu():
 
 
 # ─────────────────────────────────────────
+#  THEME MENU
+# ─────────────────────────────────────────
+_ROLE_DESC = {
+    "primary":   "Main labels, prompts, section names  →  cyan()",
+    "secondary": "Menu option numbers                  →  yellow()",
+    "success":   "Success messages, ✅                  →  green()",
+    "danger":    "Errors, [0] Back buttons             →  red()",
+    "accent":    "Settings group headers               →  magenta()",
+    "info":      "Counts, details, secondary info      →  blue()",
+    "muted":     "Descriptions, plain text             →  white()",
+    "header":    "Banner / title text                  →  header()",
+    "divider":   "Separator lines  ═══════             →  divider()",
+}
+
+def _configure_custom_theme(td: dict):
+    """Walk through each UI role and let the user pick a color."""
+    roles      = list(_ROLE_DESC.keys())
+    color_keys = list(_FORE.keys())
+
+    # Start from the currently active preset (or existing custom) as the base
+    base_name = td.get("active", "Plex Classic")
+    if base_name == "Custom":
+        saved = td.get("custom", {})
+        base  = COLOR_PRESETS["Plex Classic"]
+        new_schema = {}
+        for role, default in base.items():
+            entry = saved.get(role)
+            new_schema[role] = tuple(entry) if (entry and len(entry) == 2) else default
+    else:
+        new_schema = dict(COLOR_PRESETS.get(base_name, COLOR_PRESETS["Plex Classic"]))
+
+    print(f"\n{header('  🎨  CUSTOM THEME EDITOR')}")
+    print(cyan("  Configure each UI role. Press Enter or [S] to skip a role.\n"))
+
+    for role in roles:
+        cur_color, cur_bold = new_schema[role]
+
+        print("\n" + divider("-", 52))
+        print(f"  {header(role.upper())}")
+        print(f"  {white(_ROLE_DESC[role])}")
+        preview_ansi = _resolve_color(cur_color, cur_bold)
+        print(f"  Current: {c(f'{cur_color}  [bold={cur_bold}]', preview_ansi)}")
+        print(divider("-", 52))
+
+        for i, name in enumerate(color_keys, 1):
+            swatch = c(f"█ {name:<16}", _FORE[name])
+            print(f"  {yellow(f'[{i:>2}]')}  {swatch}", end="")
+            if i % 2 == 0:
+                print()
+        if len(color_keys) % 2 != 0:
+            print()
+
+        print(f"\n  {yellow('[B]')}  Toggle bold  (currently: {green('ON') if cur_bold else red('OFF')})")
+        print(f"  {red('[S]')}  Skip — keep current")
+
+        picked_color = cur_color
+        picked_bold  = cur_bold
+        raw = input(f"\n  {cyan('Color number / B / S')}: ").strip().lower()
+
+        if raw in ("", "s"):
+            pass                            # keep current
+        elif raw == "b":
+            picked_bold = not cur_bold
+            print(f"  {green('Bold toggled →')} {'ON' if picked_bold else 'OFF'}")
+        else:
+            try:
+                idx = int(raw) - 1
+                if 0 <= idx < len(color_keys):
+                    picked_color = color_keys[idx]
+                    bold_raw     = input(f"  {cyan('Bold? [y/N]')}: ").strip().lower()
+                    picked_bold  = bold_raw == "y"
+                else:
+                    print(red("  ⚠️  Out of range — keeping current."))
+            except ValueError:
+                print(red("  ⚠️  Invalid — keeping current."))
+
+        new_schema[role] = (picked_color, picked_bold)
+
+    td["active"] = "Custom"
+    td["custom"] = {role: list(v) for role, v in new_schema.items()}
+    save_theme(td)
+    apply_theme()
+    print(green("\n  ✅ Custom theme saved and applied!"))
+
+
+def theme_menu():
+    while True:
+        td     = load_theme()
+        active = td.get("active", "Plex Classic")
+
+        print("\n" + divider())
+        print(header("  🎨  COLOR THEME"))
+        print(cyan(f"  Active: {active}"))
+        print(divider())
+
+        for i, name in enumerate(PRESET_NAMES, 1):
+            marker = green(" ◀ active") if name == active else ""
+            # Show a tiny live swatch using that preset's primary color
+            swatch_color = _resolve_color(*COLOR_PRESETS[name]["primary"])
+            swatch = c("██", swatch_color)
+            print(f"  {yellow(f'[{i:>2}]')}  {swatch}  {white(name)}{marker}")
+
+        print(divider("-", 52))
+        custom_marker = green(" ◀ active") if active == "Custom" else ""
+        print(f"  {yellow('[C]')}  {white('Custom — configure each role individually')}{custom_marker}")
+        print(f"  {yellow('[P]')}  {white('Preview all themes (print sample line)')}")
+        print(divider("-", 52))
+        print(f"  {red('[0]')}  {white('Back to Main Menu')}")
+        print(divider())
+
+        choice = input(f"  {cyan('Select theme')}: ").strip().lower()
+
+        if choice == "0":
+            break
+        elif choice == "c":
+            _configure_custom_theme(td)
+        elif choice == "p":
+            # Print one sample line per preset so user can compare
+            print("\n" + divider("-", 52))
+            for name, schema in COLOR_PRESETS.items():
+                pri  = c("primary",   _resolve_color(*schema["primary"]))
+                sec  = c("secondary", _resolve_color(*schema["secondary"]))
+                suc  = c("success",   _resolve_color(*schema["success"]))
+                hdg  = c(name,        _resolve_color(*schema["header"]))
+                print(f"  {hdg:<30}  {pri}  {sec}  {suc}")
+            print(divider("-", 52))
+        else:
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(PRESET_NAMES):
+                    chosen = PRESET_NAMES[idx]
+                    td["active"] = chosen
+                    save_theme(td)
+                    apply_theme()
+                    print(green(f"\n  ✅ Theme set to '{chosen}' — changes take effect immediately."))
+                else:
+                    print(red("  ⚠️  Invalid option."))
+            except ValueError:
+                print(red("  ⚠️  Invalid option."))
+
+
+# ─────────────────────────────────────────
 #  MAIN MENU
 # ─────────────────────────────────────────
 def menu():
@@ -3185,14 +3523,16 @@ def menu():
         print(f"  {yellow('[5]')}  {white('Watchlist / Favorites')}  {blue(f'({watchlist_count} item' + ('s' if watchlist_count != 1 else '') + ')')}")
         print(f"  {yellow('[9]')}  {white('Movie Search List')}  {blue(f'({movie_list_count} movie' + ('s' if movie_list_count != 1 else '') + ')')}")
         print(divider("-", 52))
+        active_theme = load_theme().get("active", "Plex Classic")
         print(f"  {magenta('[6]')}  {white('Version Manager')}")
         print(f"  {magenta('[7]')}  {white('Discord Notification Settings')}")
         print(f"  {magenta('[8]')}  {white('Server Manager')}  {blue(f'({len(servers)} server' + ('s' if len(servers)!=1 else '') + ' configured)')}")
+        print(f"  {magenta('[T]')}  {white('Color Theme')}  {blue(f'({active_theme})')}")
         print(divider("-", 52))
         print(f"  {red('[0]')}  {white('Exit')}")
         print(divider())
 
-        choice = input(f"  {cyan('Select an option')}: ").strip()
+        choice = input(f"  {cyan('Select an option')}: ").strip().lower()
 
         if   choice == "0": log.info("User exited."); print(green("\n  Goodbye! 👋\n")); break
         elif choice == "1": list_libraries()
@@ -3204,6 +3544,7 @@ def menu():
         elif choice == "7": discord_settings_menu()
         elif choice == "8": server_manager_menu()
         elif choice == "9": movie_list_menu()
+        elif choice == "t": theme_menu()
         else:               print(red("  ⚠️  Invalid option. Please try again."))
 
 # ─────────────────────────────────────────
