@@ -93,6 +93,15 @@ def get_system_info():
             continue
     return {"os": os_str, "ip": ip}
 
+def get_active_stream_count():
+    """Return the number of active Plex streams. Returns 0 on error."""
+    try:
+        res = requests.get(f"{ACTIVE['url']}/status/sessions", headers=headers(), timeout=5)
+        res.raise_for_status()
+        return res.json()["MediaContainer"].get("size", 0)
+    except Exception:
+        return 0
+
 # ─────────────────────────────────────────
 #  VERSION HELPERS
 # ─────────────────────────────────────────
@@ -464,12 +473,14 @@ def startup_servers():
     log.info(f"Active server: {ACTIVE['name']} ({ACTIVE['url']}) | v{ACTIVE['version']} | {ACTIVE['lib_count']} libs | App v{app_ver}")
     print(green(f"  ✅ Connected to {cyan(ACTIVE['name'])}"))
     print(f"     {white('Server:')} {blue(ACTIVE['version'])}  {white('Libraries:')} {magenta(str(ACTIVE['lib_count']))}  {white('App:')} {cyan('v'+app_ver)}\n")
-    sysinfo = get_system_info()
-    log.info(f"System: {sysinfo['os']} | IP: {sysinfo['ip']}")
+    sysinfo      = get_system_info()
+    stream_count = get_active_stream_count()
+    log.info(f"System: {sysinfo['os']} | IP: {sysinfo['ip']} | Active streams: {stream_count}")
     notify_discord(
         f"✅ Connected successfully\n\n"
         f"📡 Server version: `{ACTIVE['version']}`\n"
-        f"📚 Libraries: `{ACTIVE['lib_count']}`\n\n"
+        f"📚 Libraries: `{ACTIVE['lib_count']}`\n"
+        f"▶️ Active streams: `{stream_count}`\n\n"
         f"🖥️ OS: `{sysinfo['os']}`\n"
         f"🌐 IP: `{sysinfo['ip']}`",
         title=f"🎬 Plex Manager Started — {ACTIVE['name']}",
