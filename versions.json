@@ -93,5 +93,10 @@
     "version": "0.0.19",
     "date": "2026-02-28",
     "notes": "recreated system_info_notify.py with OS, external IP, and active stream count"
+  },
+  {
+    "version": "0.0.20",
+    "date": "2026-02-28",
+    "notes": "add heartbeat_scheduler.py for cross-platform daily scheduling (Windows/Linux), reschedules at random time 00:00-11:59 after each run"
   }
 ]

@@ -19,7 +19,7 @@ Every time code changes are made and pushed to GitHub, all three of these must b
 
 Never commit code changes without updating `versions.json` and `README.md` in the same commit.
 
-**Current version:** `v0.0.19`
+**Current version:** `v0.0.20`
 
 ---
 
@@ -106,7 +106,19 @@ Populated at startup by `startup_servers()` → `refresh_active()`. All API call
 - `get_app_version()` returns the last version string
 - `suggest_next_version()` auto-increments the patch number
 - Log IDs use format `log.001`, `log.002`, etc.
-- **Current version: `v0.0.19`**
+- **Current version: `v0.0.20`**
+
+---
+
+## Heartbeat Scheduler
+
+`heartbeat_scheduler.py` — cross-platform daily scheduler for `system_info_notify.py`:
+- Picks a random time between `00:00–11:59` using `random.randint`
+- Registers with the OS scheduler (**Windows**: `schtasks`, **Linux**: `crontab`)
+- Saves next run info to `heartbeat.json`
+- `system_info_notify.py` calls `schedule_next()` automatically after each run
+- Discord footer shows the next scheduled run date/time
+- Run standalone with flags: `--status` (show next run) · `--remove` (delete task)
 
 ---
 

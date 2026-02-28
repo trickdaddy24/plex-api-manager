@@ -1,6 +1,6 @@
 import json
 import platform
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -57,17 +57,18 @@ def load_webhook():
             return ""
     return ""
 
-def send(webhook_url, sysinfo, stream_count):
+def send(webhook_url, sysinfo, stream_count, next_run=None):
+    footer_text = f"Next heartbeat: {next_run}" if next_run else "system_info_notify.py"
     payload = {
         "embeds": [{
-            "title": "🖥️ System Info",
+            "title": "💓 Heartbeat",
             "description": (
                 f"🖥️ OS: `{sysinfo['os']}`\n"
                 f"🌐 IP: `{sysinfo['ip']}`\n"
                 f"▶️ Active streams: `{stream_count}`"
             ),
             "color": 0x5865F2,
-            "footer": {"text": "system_info_notify.py"},
+            "footer": {"text": footer_text},
             "timestamp": datetime.utcnow().isoformat()
         }]
     }
@@ -89,8 +90,19 @@ if __name__ == "__main__":
     print(f"  IP      : {sysinfo['ip']}")
     print(f"  Streams : {stream_count}")
 
+    # Schedule next heartbeat and get the chosen time for the Discord footer
+    next_run_label = None
+    try:
+        from heartbeat_scheduler import schedule_next
+        print("\n🗓️  Scheduling next heartbeat...")
+        next_time     = schedule_next()
+        tomorrow      = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        next_run_label = f"{tomorrow} at {next_time}"
+    except Exception as e:
+        print(f"  ⚠️  Scheduler error: {e}")
+
     webhook = load_webhook()
     if not webhook:
         print("⚠️  No webhook found in discord_creds.json")
     else:
-        send(webhook, sysinfo, stream_count)
+        send(webhook, sysinfo, stream_count, next_run=next_run_label)

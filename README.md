@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.19`
+**Current version:** `v0.0.20`
 
 ---
 
@@ -17,6 +17,7 @@ A colorized Python CLI for managing multiple Plex Media Server instances via the
 - **Watchlist / Favorites** — track items you want to watch, export in multiple formats
 - **Discord notifications** — rich embeds on startup, server switch, library list, version adds, and stream kills
 - **System info on startup** — OS version, external public IP, and active stream count sent to Discord automatically
+- **Daily heartbeat** — cross-platform scheduler fires `system_info_notify.py` once daily at a random time between 00:00–11:59, self-rescheduling after each run
 - **Version manager** — track your own changelog entries inside the app
 
 ---
@@ -131,6 +132,9 @@ Option `[4]` lets you fire a system info embed on demand at any time.
 
 ```
 plex_menu.py              # Main script — everything lives here
+system_info_notify.py     # Standalone heartbeat — OS, IP, streams → Discord
+heartbeat_scheduler.py    # Cross-platform scheduler (Windows/Linux)
+heartbeat.json            # Stores next scheduled run time (auto-generated)
 plex_servers.example.json # Server config template
 versions.json             # Changelog / version history
 watchlist.json            # Saved watchlist items
@@ -146,6 +150,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.20 | Add heartbeat_scheduler.py — cross-platform daily scheduling, random time 00:00–11:59 |
 | v0.0.19 | Recreated system_info_notify.py with OS, external IP, and active stream count |
 | v0.0.18 | Moved system info into Discord settings menu option 4, removed standalone py |
 | v0.0.17 | Added active stream count to Discord |
