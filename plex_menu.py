@@ -70,7 +70,7 @@ GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 # This is the authoritative version source.  It is always correct in all
 # install modes (git clone, pip/pipx, Docker) regardless of whether the
 # local versions.json data file has been synced yet.
-APP_VERSION        = "0.0.35"
+APP_VERSION        = "0.0.36"
 UPDATE_FILES       = [
     "plex_menu.py",
     "movie_db_scan.py",
@@ -627,35 +627,8 @@ def perform_update(update_info: dict):
             print(red(f"  ❌ git error: {e}"))
             log.error(f"Update git error: {e}")
 
-    elif method == "pip":
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "--upgrade",
-                 f"git+https://github.com/{GITHUB_REPO}.git"],
-                capture_output=True, text=True,
-            )
-            if result.returncode == 0:
-                print(green("  ✅ pip upgrade succeeded."))
-                log.info(f"Updated via pip: v{local_ver} → v{remote_ver}")
-                success = True
-                # pip replaces script files only — explicitly sync the changelog
-                # data file so get_app_version() / version history are current
-                try:
-                    vr = requests.get(f"{GITHUB_RAW_BASE}/versions.json", timeout=10)
-                    vr.raise_for_status()
-                    (BASE_DIR / "versions.json").write_text(vr.text, encoding="utf-8")
-                    print(f"  {green('✅')} {white('versions.json synced')}")
-                    log.info("versions.json synced after pip upgrade")
-                except Exception as ve:
-                    log.warning(f"versions.json sync after pip upgrade failed: {ve}")
-            else:
-                print(red("  ❌ pip upgrade failed."))
-                log.error(f"pip upgrade failed: {result.stderr.strip()}")
-        except Exception as e:
-            print(red(f"  ❌ pip error: {e}"))
-            log.error(f"Update pip error: {e}")
-
-    else:   # raw file-by-file download
+    else:   # pip or raw — direct GitHub Raw download overwrites files in-place
+        print(f"  {white('Downloading files from GitHub...')}")
         all_ok = True
         for fname in UPDATE_FILES:
             url = f"{GITHUB_RAW_BASE}/{fname}"

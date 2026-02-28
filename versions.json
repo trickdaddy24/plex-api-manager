@@ -173,5 +173,10 @@
     "version": "0.0.35",
     "date": "2026-02-28",
     "notes": "add About screen ([A] in main menu) — script-header style box showing title, author, revised date, description, version, entry point, GitHub link, and license"
+  },
+  {
+    "version": "0.0.36",
+    "date": "2026-02-28",
+    "notes": "fix self-update for pip/pipx installs — replace broken 'pip install --upgrade git+...' with direct GitHub Raw file download that overwrites the running script in-place"
   }
 ]
