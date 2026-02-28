@@ -54,10 +54,15 @@ SERVERS_FILE  = BASE_DIR / "plex_servers.json"   # replaces plex_creds.json
 DISCORD_FILE  = BASE_DIR / "discord_creds.json"
 VERSIONS_FILE  = BASE_DIR / "versions.json"
 WATCHLIST_FILE  = BASE_DIR / "watchlist.json"
-MOVIE_LIST_FILE = BASE_DIR / "movie_list.json"
-RADARR_FILE     = BASE_DIR / "radarr_creds.json"
-API_KEYS_FILE   = BASE_DIR / "api_keys.json"
-MAX_SERVERS     = 10
+MOVIE_LIST_FILE    = BASE_DIR / "movie_list.json"
+RADARR_FILE        = BASE_DIR / "radarr_creds.json"
+API_KEYS_FILE      = BASE_DIR / "api_keys.json"
+MOVIE_DB_FILE      = BASE_DIR / "movie_db.json"
+MOVIE_DB_PROG_FILE = BASE_DIR / "movie_db_progress.json"
+MOVIE_DB_LOG_DIR   = LOG_DIR / "movie_db"
+MOVIE_DB_TASK_NAME = "PlexMovieDBScan"
+TMDB_DAILY_LIMIT   = 1000
+MAX_SERVERS        = 10
 
 # ─────────────────────────────────────────
 #  LOGGING SETUP
@@ -905,15 +910,16 @@ def scan_and_save_library(lib_key, lib_title, lib_type):
     return out_file
 
 def search_cached_library(out_file, query):
-    """Search a previously scanned library JSON by title."""
+    """Search a previously scanned library JSON by title. Offers add-to-Movie-List for movie matches."""
     if not out_file or not Path(out_file).exists():
         print(red("  ❌ No scan file found."))
         return
     with open(out_file, encoding="utf-8") as f:
         data = json.load(f)
 
-    query_lower = query.lower()
-    grand_total = 0
+    query_lower  = query.lower()
+    grand_total  = 0
+    movie_matches = []
     for category in ("movies", "tv_shows", "others"):
         matches = [i for i in data["data"].get(category, []) if query_lower in i.get("title","").lower()]
         if not matches:
@@ -924,15 +930,59 @@ def search_cached_library(out_file, query):
             genres_str = ", ".join(m.get("genres", [])) or "N/A"
             print(f"      {cyan('•')} {yellow(m['title'])} {blue('('+str(m['year'])+')')}")
             print(f"          {white('Rating:')} {m['rating']}  {white('Duration:')} {m['duration']}  {white('Genres:')} {genres_str}")
-            # show first file path short
             for med in m.get("media", []):
                 for part in med.get("parts", []):
                     print(f"          {white('File:')} {green(part['file_path_short'])}  {white('Size:')} {part['file_size']}")
                     break
                 break
+            if category == "movies":
+                movie_matches.append(m)
         grand_total += len(matches)
 
-        print(f"\n{green('✅ Grand Total:')} {yellow(str(grand_total))} result{'s' if grand_total!=1 else ''}")
+    print(f"\n{green('✅ Grand Total:')} {yellow(str(grand_total))} result{'s' if grand_total!=1 else ''}")
+
+    # Offer add-to-Movie-List for movie results
+    if movie_matches:
+        print(divider("-", 52))
+        print(f"  {white('Add a movie to your Movie Search List?')}")
+        for i, m in enumerate(movie_matches[:10], 1):
+            print(f"  {yellow(f'[{i}]')}  {white(m['title'])}  {blue(f'({m[\"year\"]})')}")
+        print(f"  {red('[0]')}  {white('Skip')}")
+        sel = input(f"  {cyan('Select movie to add (or 0 to skip)')}: ").strip()
+        if sel != "0" and sel.isdigit():
+            try:
+                idx   = int(sel) - 1
+                if 0 <= idx < len(movie_matches[:10]):
+                    picked     = movie_matches[idx]
+                    movie_list = load_movie_list()
+                    dupes = [x for x in movie_list if x["title"].lower() == picked["title"].lower()]
+                    if dupes:
+                        print(yellow(f"  ⚠️  '{picked['title']}' already in Movie List ({dupes[0]['id']})."))
+                    else:
+                        # Check movie_db for enriched data
+                        db      = load_movie_db()
+                        db_hit  = next((v for v in db.values() if v.get("title","").lower() == picked["title"].lower()), None)
+                        new_id  = _next_movie_id(movie_list)
+                        entry   = {
+                            "id":          new_id,
+                            "title":       picked["title"],
+                            "year":        str(picked.get("year", "N/A")),
+                            "tmdb_id":     db_hit["tmdb_id"] if db_hit else "N/A",
+                            "imdb_id":     db_hit.get("imdb_id","N/A") if db_hit else "N/A",
+                            "mpaa_rating": db_hit.get("mpaa_rating","N/A") if db_hit else picked.get("content_rating","N/A"),
+                            "runtime":     db_hit.get("runtime","N/A") if db_hit else picked.get("duration","N/A"),
+                            "imdb_rating": db_hit.get("imdb_rating","N/A") if db_hit else "N/A",
+                            "rt_rating":   db_hit.get("rt_rating","N/A") if db_hit else "N/A",
+                            "description": db_hit.get("description","N/A") if db_hit else picked.get("summary","N/A"),
+                            "added_at":    datetime.now().strftime("%Y-%m-%d"),
+                        }
+                        movie_list.append(entry)
+                        save_movie_list(movie_list)
+                        log.info(f"Added to Movie List from library scan: {entry['title']} [{new_id}]")
+                        src = "enriched from DB" if db_hit else "basic info only — run Movie Database scan to enrich"
+                        print(green(f"  ✅ '{entry['title']}' added as {new_id}. ({src})"))
+            except (ValueError, IndexError):
+                print(red("  ❌ Invalid selection."))
 
 # ─────────────────────────────────────────
 #  LIBRARY DIFF ENGINE
@@ -1991,6 +2041,420 @@ def _export_watchlist(items, target):
 
 
 # ─────────────────────────────────────────
+#  MOVIE DATABASE — HELPERS
+# ─────────────────────────────────────────
+def load_movie_db():
+    if MOVIE_DB_FILE.exists():
+        try:
+            with open(MOVIE_DB_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            log.warning(f"Could not read movie_db: {e}")
+    return {}
+
+def save_movie_db(db):
+    with open(MOVIE_DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, indent=2, ensure_ascii=False)
+
+def load_movie_db_progress():
+    if MOVIE_DB_PROG_FILE.exists():
+        try:
+            with open(MOVIE_DB_PROG_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_movie_db_progress(data):
+    with open(MOVIE_DB_PROG_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def _tmdb_quota_check(prog):
+    """Reset quota counter if date changed, then return updated prog."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    if prog.get("quota_date") != today:
+        prog["quota_date"]  = today
+        prog["quota_used"]  = 0
+    return prog
+
+def _fetch_plex_movie_list():
+    """Return all movie items from all Plex movie libraries, each tagged with _plex_library."""
+    all_movies = []
+    try:
+        r = requests.get(f"{ACTIVE['url']}/library/sections", headers=headers(), timeout=10)
+        r.raise_for_status()
+        sections   = r.json()["MediaContainer"].get("Directory", [])
+        movie_libs = [s for s in sections if s.get("type") == "movie"]
+        for lib in movie_libs:
+            lib_key   = lib.get("key")
+            lib_title = lib.get("title", "?")
+            res = requests.get(
+                f"{ACTIVE['url']}/library/sections/{lib_key}/all",
+                headers=headers(),
+                params={"includeGuids": 1},
+                timeout=30,
+            )
+            res.raise_for_status()
+            items = res.json()["MediaContainer"].get("Metadata", [])
+            for item in items:
+                item["_plex_library"] = lib_title
+            all_movies.extend(items)
+            log.info(f"Fetched {len(items)} movies from library '{lib_title}'")
+    except Exception as e:
+        log.error(f"_fetch_plex_movie_list error: {e}")
+    return all_movies
+
+def _extract_guids(item):
+    """Extract TMDB and IMDB IDs from a Plex Guid list."""
+    tmdb_id = None
+    imdb_id = None
+    for g in item.get("Guid", []):
+        gid = g.get("id", "")
+        if gid.startswith("tmdb://"):
+            tmdb_id = gid.split("tmdb://")[-1]
+        elif gid.startswith("imdb://"):
+            imdb_id = gid.split("imdb://")[-1]
+    return tmdb_id, imdb_id
+
+def _schedule_movie_db_scan():
+    """Register movie_db_scan.py with the OS scheduler for tomorrow."""
+    import shutil, random
+    from datetime import timedelta
+    h, m     = random.randint(0, 5), random.randint(0, 59)
+    run_time = f"{h:02d}:{m:02d}"
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    ep = shutil.which("plex-movie-scan")
+    cmd = ep if ep else f"{sys.executable} \"{str(BASE_DIR / 'movie_db_scan.py')}\""
+
+    if platform.system() == "Windows":
+        start_date = datetime.now().strftime("%m/%d/%Y")
+        subprocess.run(
+            ["schtasks", "/create", "/tn", MOVIE_DB_TASK_NAME,
+             "/tr", cmd, "/sc", "ONCE", "/sd", start_date, "/st", run_time, "/f"],
+            capture_output=True,
+        )
+    else:
+        cron_line = f"{m} {h} * * * {cmd}  # {MOVIE_DB_TASK_NAME}"
+        result    = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
+        existing  = result.stdout if result.returncode == 0 else ""
+        lines     = [l for l in existing.splitlines() if MOVIE_DB_TASK_NAME not in l]
+        lines.append(cron_line)
+        subprocess.run(["crontab", "-"], input="\n".join(lines) + "\n", text=True)
+
+    log.info(f"Movie DB scan scheduled: {tomorrow} {run_time}")
+    return f"{tomorrow} {run_time}"
+
+def _get_movie_db_logger():
+    """Return (or create) a dedicated logger for the movie DB scan."""
+    MOVIE_DB_LOG_DIR.mkdir(exist_ok=True)
+    db_log = logging.getLogger("movie_db")
+    if not db_log.handlers:
+        h = logging.FileHandler(MOVIE_DB_LOG_DIR / "movie_db_scan.log", encoding="utf-8")
+        h.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
+        db_log.addHandler(h)
+        db_log.setLevel(logging.INFO)
+    return db_log
+
+def _show_movie_db_status(prog, db):
+    """Print a formatted status block for the movie database scan."""
+    status   = prog.get("status", "idle")
+    total    = prog.get("total_plex_movies", 0)
+    done     = prog.get("processed_count", 0)
+    failed   = prog.get("failed_count", 0)
+    pending  = len(prog.get("pending_rating_keys", []))
+    q_used   = prog.get("quota_used", 0)
+    q_date   = prog.get("quota_date", "N/A")
+    next_run = prog.get("next_scheduled_run", "Not scheduled")
+    started  = prog.get("scan_started_at", "N/A")
+    sc       = green if status == "complete" else yellow if status == "paused" else cyan
+    print(f"\n{header('  📊  MOVIE DB STATUS')}\n" + divider("-", 52))
+    print(f"  {white('Status:')}           {sc(status)}")
+    print(f"  {white('Scan started:')}     {blue(started)}")
+    print(f"  {white('Total in Plex:')}    {yellow(str(total))}")
+    print(f"  {white('Processed:')}        {green(str(done))}")
+    print(f"  {white('Failed / skipped:')} {red(str(failed))}")
+    print(f"  {white('Pending:')}          {yellow(str(pending))}")
+    print(f"  {white('In database:')}      {cyan(str(len(db)))}")
+    print(f"  {white('TMDB calls today:')} {yellow(str(q_used))} / {str(TMDB_DAILY_LIMIT)}  {blue(f'({q_date})')}")
+    print(f"  {white('Next scheduled:')}   {blue(next_run)}")
+    print(f"  {white('Log folder:')}       {green(str(MOVIE_DB_LOG_DIR))}")
+    print()
+
+def _run_movie_db_scan_interactive():
+    """Interactive movie DB enrichment scan — runs from inside the menu."""
+    api_keys = load_api_keys()
+    tmdb_key = api_keys.get("tmdb_key", "")
+    omdb_key = api_keys.get("omdb_key", "")
+    if not tmdb_key:
+        print(red("  ❌ TMDB API key required. Go to Movie Search List → [7] API Keys."))
+        return
+
+    db_log = _get_movie_db_logger()
+    db     = load_movie_db()
+    prog   = load_movie_db_progress()
+    prog   = _tmdb_quota_check(prog)
+
+    quota_remaining = TMDB_DAILY_LIMIT - prog.get("quota_used", 0)
+    if quota_remaining <= 0:
+        print(red(f"  ❌ TMDB daily quota exhausted ({TMDB_DAILY_LIMIT} calls used). Resets tomorrow."))
+        next_run = _schedule_movie_db_scan()
+        prog["next_scheduled_run"] = next_run
+        prog["status"] = "paused"
+        save_movie_db_progress(prog)
+        print(yellow(f"  ⏰ Scan scheduled to continue: {next_run}"))
+        return
+
+    # Get pending list — start fresh if empty
+    pending_keys = prog.get("pending_rating_keys", [])
+    if not pending_keys:
+        print(cyan("  📡 Fetching all movies from Plex libraries..."))
+        plex_movies = _fetch_plex_movie_list()
+        if not plex_movies:
+            print(red("  ❌ No movies found in Plex libraries. Check server connection."))
+            return
+        pending_keys = [str(m.get("ratingKey", "")) for m in plex_movies if m.get("ratingKey")]
+        prog.update({
+            "pending_rating_keys": pending_keys,
+            "total_plex_movies":   len(pending_keys),
+            "processed_count":     0,
+            "failed_count":        0,
+            "status":              "scanning",
+            "scan_started_at":     datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "next_scheduled_run":  None,
+        })
+        save_movie_db_progress(prog)
+        print(green(f"  ✅ Found {len(pending_keys)} movies across all Plex movie libraries."))
+        notify_discord(
+            f"📀 **Movie DB Scan Started**\n\n"
+            f"🎬 Total movies: `{len(pending_keys)}`\n"
+            f"🔑 TMDB quota remaining: `{quota_remaining}`",
+            title="📀 Movie DB Scan — Started", color=0x57F287,
+        )
+        db_log.info(f"Scan started — {len(pending_keys)} movies to process")
+    else:
+        print(yellow(f"  ▶️  Resuming — {len(pending_keys)} movies remaining."))
+        notify_discord(
+            f"▶️ **Movie DB Scan Resumed**\n\n"
+            f"🎬 Remaining: `{len(pending_keys)}`\n"
+            f"🔑 TMDB quota remaining: `{quota_remaining}`",
+            title="📀 Movie DB Scan — Resumed", color=0xFEE75C,
+        )
+        db_log.info(f"Scan resumed — {len(pending_keys)} movies remaining")
+
+    print(divider("-", 52))
+    processed_this_run = 0
+    failed_this_run    = 0
+
+    while pending_keys and (TMDB_DAILY_LIMIT - prog.get("quota_used", 0)) > 0:
+        rating_key = pending_keys[0]
+        plex_item  = _fetch_full_item(rating_key)
+        if not plex_item:
+            pending_keys.pop(0)
+            failed_this_run += 1
+            prog["failed_count"] = prog.get("failed_count", 0) + 1
+            db_log.warning(f"Could not fetch Plex item ratingKey={rating_key}")
+            continue
+
+        tmdb_id, imdb_id = _extract_guids(plex_item)
+        if not tmdb_id:
+            pending_keys.pop(0)
+            prog["processed_count"] = prog.get("processed_count", 0) + 1
+            db_log.info(f"No TMDB ID — skipped: {plex_item.get('title','?')}")
+            continue
+
+        # Skip if already enriched today
+        if str(tmdb_id) in db and db[str(tmdb_id)].get("last_updated") == datetime.now().strftime("%Y-%m-%d"):
+            pending_keys.pop(0)
+            prog["processed_count"] = prog.get("processed_count", 0) + 1
+            continue
+
+        details = _tmdb_details(tmdb_id, tmdb_key)
+        prog["quota_used"] = prog.get("quota_used", 0) + 1
+        if not details:
+            pending_keys.pop(0)
+            failed_this_run += 1
+            prog["failed_count"] = prog.get("failed_count", 0) + 1
+            db_log.warning(f"TMDB details failed — ratingKey={rating_key} tmdb={tmdb_id}")
+            save_movie_db_progress(prog)
+            continue
+
+        eff_imdb = details.get("imdb_id") or imdb_id or "N/A"
+        ratings  = {"imdb_rating": "N/A", "rt_rating": "N/A"}
+        if omdb_key and eff_imdb and eff_imdb != "N/A":
+            ratings = _omdb_ratings(eff_imdb, omdb_key)
+
+        db[str(tmdb_id)] = {
+            "tmdb_id":        str(tmdb_id),
+            "imdb_id":        eff_imdb,
+            "title":          details["title"],
+            "year":           details["year"],
+            "runtime":        details["runtime"],
+            "mpaa_rating":    details["mpaa_rating"],
+            "imdb_rating":    ratings["imdb_rating"],
+            "rt_rating":      ratings["rt_rating"],
+            "description":    details["description"],
+            "plex_rating_key": str(rating_key),
+            "plex_library":   plex_item.get("_plex_library", "N/A"),
+            "plex_server":    ACTIVE["name"],
+            "last_updated":   datetime.now().strftime("%Y-%m-%d"),
+        }
+        pending_keys.pop(0)
+        prog["processed_count"] = prog.get("processed_count", 0) + 1
+        processed_this_run += 1
+        db_log.info(f"Enriched: {details['title']} ({details['year']}) tmdb:{tmdb_id} imdb:{eff_imdb} IMDB:{ratings['imdb_rating']} RT:{ratings['rt_rating']}")
+        print(f"  {green('✅')} {white(details['title'][:38]):<40} {blue(str(details['year']))}  "
+              f"{yellow('IMDB:')} {ratings['imdb_rating']}  {green('RT:')} {ratings['rt_rating']}  {magenta(details['mpaa_rating'])}")
+
+        if processed_this_run % 10 == 0:
+            save_movie_db(db)
+            prog["pending_rating_keys"] = pending_keys
+            save_movie_db_progress(prog)
+
+    # Final save
+    save_movie_db(db)
+    prog["pending_rating_keys"] = pending_keys
+    save_movie_db_progress(prog)
+    print(divider("-", 52))
+
+    if not pending_keys:
+        prog["status"] = "complete"
+        prog["next_scheduled_run"] = None
+        save_movie_db_progress(prog)
+        msg = (f"✅ **Movie DB Scan Complete!**\n\n"
+               f"🎬 This run: `{processed_this_run}` processed, `{failed_this_run}` failed\n"
+               f"📀 Total in database: `{len(db)}`")
+        db_log.info(f"Scan complete — processed:{processed_this_run} failed:{failed_this_run} db_size:{len(db)}")
+        print(f"  {green('✅ Scan complete!')}  {white(str(processed_this_run))} processed, {red(str(failed_this_run))} failed.")
+        notify_discord(msg, title="📀 Movie DB Scan — Complete", color=0x57F287)
+    else:
+        next_run = _schedule_movie_db_scan()
+        prog["status"] = "paused"
+        prog["next_scheduled_run"] = next_run
+        save_movie_db_progress(prog)
+        msg = (f"⏸️ **Movie DB Scan Paused — Daily Quota Reached**\n\n"
+               f"🎬 This run: `{processed_this_run}` processed\n"
+               f"⏳ Remaining: `{len(pending_keys)}`\n"
+               f"⏰ Next run scheduled: `{next_run}`")
+        db_log.info(f"Scan paused (quota) — this_run:{processed_this_run} remaining:{len(pending_keys)} next:{next_run}")
+        print(f"  {yellow('⏸️  Daily quota reached.')} {white(str(processed_this_run))} processed this run, {yellow(str(len(pending_keys)))} remaining.")
+        print(f"  {cyan('Next run scheduled:')} {next_run}")
+        notify_discord(msg, title="📀 Movie DB Scan — Paused", color=0xFEE75C)
+
+# ─────────────────────────────────────────
+#  MOVIE DATABASE MENU
+# ─────────────────────────────────────────
+def movie_db_menu():
+    while True:
+        db      = load_movie_db()
+        prog    = load_movie_db_progress()
+        prog    = _tmdb_quota_check(prog)
+        status  = prog.get("status", "idle")
+        pending = len(prog.get("pending_rating_keys", []))
+        q_rem   = TMDB_DAILY_LIMIT - prog.get("quota_used", 0)
+        next_run = prog.get("next_scheduled_run")
+        sc      = green if status == "complete" else yellow if status == "paused" else cyan
+
+        print("\n" + divider())
+        print(header("  📀  MOVIE DATABASE"))
+        print(cyan(f"         {len(db)} enriched movies  ·  Status: {sc(status)}  ·  TMDB quota: {q_rem}/{TMDB_DAILY_LIMIT} today"))
+        if pending:
+            print(yellow(f"         {pending} movies pending enrichment"))
+        if next_run:
+            print(blue(f"         Next scheduled scan: {next_run}"))
+        print(divider())
+        print(f"  {yellow('[1]')}  {white('Search Database')}")
+        print(f"  {yellow('[2]')}  {white('Build / Update Database from Plex')}  {blue('(enriches with TMDB + OMDB)')}")
+        print(f"  {yellow('[3]')}  {white('Scan Status')}")
+        print(f"  {yellow('[4]')}  {white('Schedule Continuation')}")
+        print(f"  {red('[0]')}  {white('Back')}")
+        print(divider())
+        choice = input(f"  {cyan('Select')}: ").strip()
+
+        if choice == "0":
+            break
+
+        # ── SEARCH DATABASE ─────────────────────
+        elif choice == "1":
+            if not db:
+                print(yellow("  Database is empty. Run [2] to build it first."))
+                continue
+            query = input(f"\n  {cyan('🔍 Search movie database')}: ").strip().lower()
+            if not query:
+                continue
+            matches = [(k, v) for k, v in db.items() if query in v.get("title", "").lower()]
+            if not matches:
+                print(yellow(f"  No results for '{query}'."))
+                continue
+            display = matches[:20]
+            print(f"\n{header('  🔍 DATABASE RESULTS')}\n" + divider("-", 52))
+            for i, (tid, m) in enumerate(display, 1):
+                print(f"  {yellow(f'[{i}]')}  {white(m.get('title','?'))}  {blue(f'({m.get(\"year\",\"?\")})')}"
+                      f"  {yellow('IMDB:')} {m.get('imdb_rating','N/A')}  {green('RT:')} {m.get('rt_rating','N/A')}"
+                      f"  {magenta(m.get('mpaa_rating','N/A'))}  {white(m.get('runtime','N/A'))}")
+            print(f"  {red('[0]')}  {white('Cancel')}")
+            sel = input(f"\n  {cyan('Add to Movie List (number) or 0 to cancel')}: ").strip()
+            if sel == "0":
+                continue
+            try:
+                idx = int(sel) - 1
+                if idx < 0 or idx >= len(display):
+                    raise ValueError
+            except ValueError:
+                print(red("  ❌ Invalid selection."))
+                continue
+            tid, m       = display[idx]
+            movie_list   = load_movie_list()
+            dupes        = [x for x in movie_list if str(x.get("tmdb_id", "")) == str(tid)]
+            if dupes:
+                print(yellow(f"  ⚠️  '{m['title']}' already in Movie List ({dupes[0]['id']})."))
+                continue
+            new_id = _next_movie_id(movie_list)
+            entry  = {
+                "id":          new_id,
+                "title":       m.get("title", "N/A"),
+                "year":        m.get("year", "N/A"),
+                "tmdb_id":     str(tid),
+                "imdb_id":     m.get("imdb_id", "N/A"),
+                "mpaa_rating": m.get("mpaa_rating", "N/A"),
+                "runtime":     m.get("runtime", "N/A"),
+                "imdb_rating": m.get("imdb_rating", "N/A"),
+                "rt_rating":   m.get("rt_rating", "N/A"),
+                "description": m.get("description", "N/A"),
+                "added_at":    datetime.now().strftime("%Y-%m-%d"),
+            }
+            movie_list.append(entry)
+            save_movie_list(movie_list)
+            log.info(f"Added to Movie List from DB: {entry['title']} [{new_id}]")
+            print(green(f"  ✅ '{entry['title']}' added as {new_id}."))
+
+        # ── BUILD / UPDATE ──────────────────────
+        elif choice == "2":
+            _run_movie_db_scan_interactive()
+
+        # ── STATUS ──────────────────────────────
+        elif choice == "3":
+            _show_movie_db_status(prog, db)
+
+        # ── SCHEDULE ────────────────────────────
+        elif choice == "4":
+            if pending == 0:
+                print(yellow("  No pending movies. Database is up to date or scan has not started."))
+                continue
+            next_run = _schedule_movie_db_scan()
+            prog["next_scheduled_run"] = next_run
+            save_movie_db_progress(prog)
+            print(green(f"  ✅ Scan scheduled for {next_run}"))
+            notify_discord(
+                f"⏰ **Movie DB Scan Scheduled**\n\nNext run: `{next_run}`\nPending: `{pending}` movies",
+                title="📀 Movie DB Scheduler", color=0xFEE75C,
+            )
+
+        else:
+            print(red("  ⚠️  Invalid option."))
+
+
+# ─────────────────────────────────────────
 #  MOVIE LIST — HELPERS
 # ─────────────────────────────────────────
 def load_movie_list():
@@ -2157,6 +2621,8 @@ def movie_list_menu():
         print(f"  {magenta('[5]')}  {white('Send to Radarr')}")
         print(f"  {magenta('[6]')}  {white('Radarr Settings')}")
         print(f"  {magenta('[7]')}  {white('API Keys  (TMDB / OMDB)')}")
+        db_count = len(load_movie_db())
+        print(f"  {magenta('[8]')}  {white('Movie Database')}  {blue(f'({db_count} enriched movies)')}")
         print(divider("-", 52))
         print(f"  {red('[0]')}  {white('Back to Main Menu')}")
         print(divider())
@@ -2473,6 +2939,10 @@ def movie_list_menu():
                         api_keys["omdb_key"] = key
                         save_api_keys(api_keys)
                         print(green("  ✅ OMDB API key saved."))
+
+        # ── MOVIE DATABASE ───────────────────────
+        elif choice == "8":
+            movie_db_menu()
 
         else:
             print(red("  ⚠️  Invalid option."))

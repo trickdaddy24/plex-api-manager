@@ -128,5 +128,10 @@
     "version": "0.0.26",
     "date": "2026-02-28",
     "notes": "add Movie Search List menu (option 9) — search TMDB, auto-fill metadata from TMDB/OMDB, save to movie_list.json with ms000001 IDs, send to Radarr API"
+  },
+  {
+    "version": "0.0.27",
+    "date": "2026-02-28",
+    "notes": "add Movie Database — enriches all Plex movies with TMDB/OMDB, 1000/day quota limit, scheduler continuation via movie_db_scan.py, Discord progress notifications, dedicated logs/movie_db/ log folder, add-to-list from library scan results"
   }
 ]
