@@ -70,7 +70,7 @@ GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 # This is the authoritative version source.  It is always correct in all
 # install modes (git clone, pip/pipx, Docker) regardless of whether the
 # local versions.json data file has been synced yet.
-APP_VERSION        = "0.0.37"
+APP_VERSION        = "0.0.38"
 UPDATE_FILES       = [
     "plex_menu.py",
     "movie_db_scan.py",
@@ -3676,6 +3676,13 @@ def theme_menu():
 # ─────────────────────────────────────────
 def about_menu():
     """Display the classic script-header style About block."""
+    import re as _re
+
+    # Strip ANSI escape codes to get the true visible length of a string
+    _ANSI = _re.compile(r'\x1b\[[0-9;]*m')
+    def _vlen(s: str) -> int:
+        return len(_ANSI.sub('', s))
+
     versions = load_versions()
     latest   = versions[-1] if versions else {}
     rev_raw  = latest.get("date", datetime.now().strftime("%Y-%m-%d"))
@@ -3687,22 +3694,30 @@ def about_menu():
     except Exception:
         rev_dt = rev_raw
 
-    # Left-border style — no right │ so ANSI codes never break alignment
-    SEP  = blue("─" * 52)
+    # Box layout:  "  │ " + inner + pad + " │"
+    # Visible row  = 2 + 1 + 1 + vlen(inner) + pad + 1 + 1 = 6 + vlen(inner) + pad
+    # Separator    = 2 + BOX
+    # Match when:  pad = BOX - 4 - vlen(inner)
+    BOX  = 58
+    SEP  = blue("─" * BOX)
     SIDE = blue("│")
     LW   = 14   # label column width
 
     def row(label: str, value: str, val_color=white) -> str:
-        """  │  Label         value"""
-        return f"  {SIDE}  {yellow(f'{label:<{LW}}')}{val_color(value)}"
+        inner = f"{yellow(f'{label:<{LW}}')}{val_color(value)}"
+        pad   = max(BOX - 4 - _vlen(inner), 0)
+        return f"  {SIDE} {inner}{' ' * pad} {SIDE}"
 
     def row2(value: str) -> str:
-        """  │  (indent)      continuation value"""
-        return f"  {SIDE}  {' ' * LW}{white(value)}"
+        inner = f"{' ' * LW}{white(value)}"
+        pad   = max(BOX - 4 - _vlen(inner), 0)
+        return f"  {SIDE} {inner}{' ' * pad} {SIDE}"
 
-    desc1 = "Python CLI for managing multiple Plex Media Server"
-    desc2 = "instances via the Plex HTTP API. Colorized terminal"
-    desc3 = "menus — no web UI, no config files to hand-edit."
+    # Description split to ≤ 38 chars so each line fits inside BOX=58 / LW=14
+    desc1 = "Python CLI for managing multiple Plex"
+    desc2 = "Media Server instances via the Plex"
+    desc3 = "HTTP API. Colorized terminal menus,"
+    desc4 = "no web UI, no config files to edit."
 
     print("\n" + divider())
     print(header("  ℹ️   ABOUT — PLEX API MANAGER"))
@@ -3714,6 +3729,7 @@ def about_menu():
     print(row("Description:",  desc1))
     print(row2(desc2))
     print(row2(desc3))
+    print(row2(desc4))
     print(row("Version:",      f"v{APP_VERSION}", green))
     print(row("Entry Point:",  "python plex_menu.py", cyan))
     print(row("GitHub:",       f"github.com/{GITHUB_REPO}", cyan))

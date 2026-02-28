@@ -183,5 +183,10 @@
     "version": "0.0.37",
     "date": "2026-02-28",
     "notes": "fix About screen alignment — drop right-border box approach (ANSI codes break len() padding math); use left-border only style so description lines never overflow"
+  },
+  {
+    "version": "0.0.38",
+    "date": "2026-02-28",
+    "notes": "restore About screen right border — use _vlen() helper to strip ANSI codes before padding calc; formula: pad = BOX - 4 - vlen(inner); BOX=58 fits all content"
   }
 ]
