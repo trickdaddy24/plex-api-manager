@@ -9,6 +9,20 @@ A Python CLI tool that manages multiple Plex Media Server instances via the Plex
 
 ---
 
+## Commit Workflow — ALWAYS follow this order
+
+Every time code changes are made and pushed to GitHub, all three of these must be updated in the same commit:
+
+1. **`versions.json`** — add a new entry for the change (next patch version, today's date, short note)
+2. **`README.md`** — bump `Current version:` and add a row to the Version History table
+3. **`plex_menu.py`** (or whichever file changed) — the actual code
+
+Never commit code changes without updating `versions.json` and `README.md` in the same commit.
+
+**Current version:** `v0.0.19`
+
+---
+
 ## Architecture
 
 Single-file architecture — everything lives in `plex_menu.py`. No packages, no modules, no imports from local files.
@@ -26,6 +40,7 @@ Single-file architecture — everything lives in `plex_menu.py`. No packages, no
 | `logs/plex.log` | Rotating log file |
 | `watchlist_exports/` | Exported watchlist files |
 | `old/` | Old versions of the script (reference only) |
+| `system_info_notify.py` | Standalone script — sends OS, external IP, active streams to Discord |
 
 ### Global State
 
@@ -53,7 +68,7 @@ Populated at startup by `startup_servers()` → `refresh_active()`. All API call
 | 4 | `playback_sessions()` | Active streams; can kill streams |
 | 5 | `watchlist_menu()` | Watchlist / favorites management |
 | 6 | `version_menu()` | App version history management |
-| 7 | `discord_settings_menu()` | Discord webhook config and test |
+| 7 | `discord_settings_menu()` | Discord webhook config, test, and system info |
 | 8 | `server_manager_menu()` | Add/switch/edit/delete Plex servers |
 
 ---
@@ -91,18 +106,40 @@ Populated at startup by `startup_servers()` → `refresh_active()`. All API call
 - `get_app_version()` returns the last version string
 - `suggest_next_version()` auto-increments the patch number
 - Log IDs use format `log.001`, `log.002`, etc.
-- Current version: `v0.0.10`
+- **Current version: `v0.0.19`**
 
 ---
 
 ## Discord Notifications
 
 `notify_discord(message, title, color)` sends rich embeds to the configured webhook. Called automatically on:
-- App startup / server switch
+- App startup — includes OS version, external public IP, active stream count
+- Server switch
 - Version adds
 - Library lists
+- Stream kills
+
+Discord Settings Menu (option 7) sub-options:
+- `[1]` Set / Update Webhook URL
+- `[2]` Send Test Notification
+- `[3]` Remove Webhook
+- `[4]` Send System Info on demand (OS · IP · Active Streams)
 
 Webhook stored in `discord_creds.json`. Silently skipped if not configured.
+
+---
+
+## System Info
+
+`get_system_info()` — returns OS name/release/version via `platform` and external public IP via:
+1. `https://api.ipify.org`
+2. `https://ifconfig.me/ip`
+3. `https://ipecho.net/plain`
+
+`get_active_stream_count()` — hits `/status/sessions` on the active server, returns stream count (0 on error).
+
+Both called at startup and via Discord menu option 4.
+`system_info_notify.py` is a standalone script with the same logic, loading server config directly from `plex_servers.json`.
 
 ---
 
@@ -121,7 +158,7 @@ Auto-installed on startup via `install_requirements()`:
 - `requests`
 - `colorama`
 
-Python stdlib: `subprocess`, `sys`, `json`, `logging`, `datetime`, `pathlib`
+Python stdlib: `subprocess`, `sys`, `json`, `logging`, `datetime`, `pathlib`, `platform`
 
 ---
 

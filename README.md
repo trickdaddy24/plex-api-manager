@@ -2,7 +2,7 @@
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
-**Current version:** `v0.0.18`
+**Current version:** `v0.0.19`
 
 ---
 
@@ -146,6 +146,7 @@ logs/plex.log             # Log file (gitignored)
 
 | Version | Notes |
 |---|---|
+| v0.0.19 | Recreated system_info_notify.py with OS, external IP, and active stream count |
 | v0.0.18 | Moved system info into Discord settings menu option 4, removed standalone py |
 | v0.0.17 | Added active stream count to Discord |
 | v0.0.16 | Show active stream count in startup Discord notification |
