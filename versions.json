@@ -168,5 +168,10 @@
     "version": "0.0.34",
     "date": "2026-02-28",
     "notes": "fix pip/pipx version display — embed APP_VERSION constant as authoritative version source; add _sync_versions_file_from_github() to auto-update stale data file on startup; sync versions.json after pip upgrade in perform_update()"
+  },
+  {
+    "version": "0.0.35",
+    "date": "2026-02-28",
+    "notes": "add About screen ([A] in main menu) — script-header style box showing title, author, revised date, description, version, entry point, GitHub link, and license"
   }
 ]

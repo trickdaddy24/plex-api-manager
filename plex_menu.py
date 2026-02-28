@@ -70,7 +70,7 @@ GITHUB_RAW_BASE    = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main"
 # This is the authoritative version source.  It is always correct in all
 # install modes (git clone, pip/pipx, Docker) regardless of whether the
 # local versions.json data file has been synced yet.
-APP_VERSION        = "0.0.34"
+APP_VERSION        = "0.0.35"
 UPDATE_FILES       = [
     "plex_menu.py",
     "movie_db_scan.py",
@@ -3699,6 +3699,67 @@ def theme_menu():
 
 
 # ─────────────────────────────────────────
+#  ABOUT
+# ─────────────────────────────────────────
+def about_menu():
+    """Display the classic script-header style About block."""
+    versions = load_versions()
+    latest   = versions[-1] if versions else {}
+    rev_raw  = latest.get("date", datetime.now().strftime("%Y-%m-%d"))
+
+    # Format date as M/D/YYYY (cross-platform, no zero-padding)
+    try:
+        _dt    = datetime.strptime(rev_raw, "%Y-%m-%d")
+        rev_dt = f"{_dt.month}/{_dt.day}/{_dt.year}"
+    except Exception:
+        rev_dt = rev_raw
+
+    BOX  = 65                   # total inner width of the info block
+    SEP  = blue("─" * BOX)
+    SIDE = blue("│")
+
+    def row(label: str, value: str, val_color=white) -> str:
+        """One labelled row inside the box."""
+        lbl  = f"  {yellow(f'{label:<16}')}"
+        val  = val_color(value)
+        # Raw lengths for padding (strip ANSI for count)
+        raw  = f"  {label:<16}  {value}"
+        pad  = BOX - len(raw) - 1
+        pad  = max(pad, 0)
+        return f"  {SIDE} {lbl}  {val}{' ' * pad} {SIDE}"
+
+    def row2(value: str) -> str:
+        """Continuation line (no label) for wrapped description."""
+        indent = " " * 18
+        raw    = f"  {indent}  {value}"
+        pad    = BOX - len(raw) - 1
+        pad    = max(pad, 0)
+        return f"  {SIDE}   {white(indent + value)}{' ' * pad} {SIDE}"
+
+    desc1 = "Python CLI for managing multiple Plex Media Server"
+    desc2 = "instances via the Plex HTTP API. Colorized terminal"
+    desc3 = "menus — no web UI, no config files to hand-edit."
+
+    print("\n" + divider())
+    print(header("  ℹ️   ABOUT — PLEX API MANAGER"))
+    print(divider())
+    print(f"  {SEP}")
+    print(row("Title:",        "Plex API Manager"))
+    print(row("Author(s):",    "trickdaddy24 / Claude (AI Assistant)"))
+    print(row("Revised:",      rev_dt))
+    print(row("Description:",  desc1))
+    print(row2(desc2))
+    print(row2(desc3))
+    print(row("Version:",      f"v{APP_VERSION}", green))
+    print(row("Entry Point:",  "python plex_menu.py", cyan))
+    print(row("GitHub:",       f"github.com/{GITHUB_REPO}", cyan))
+    print(row("License:",      "No License"))
+    print(f"  {SEP}")
+    print(divider())
+    input(f"  {cyan('Press Enter to return to Main Menu...')}")
+
+
+# ─────────────────────────────────────────
 #  MAIN MENU
 # ─────────────────────────────────────────
 def menu():
@@ -3738,6 +3799,7 @@ def menu():
         print(f"  {magenta('[T]')}  {white('Color Theme')}  {blue(f'({active_theme})')}")
         if _PENDING_UPDATE:
             print(f"  {green('[U]')}  {white('Update to v' + _PENDING_UPDATE['remote'])}  {blue('— ' + _PENDING_UPDATE['remote_notes'][:50])}")
+        print(f"  {cyan('[A]')}  {white('About')}")
         print(divider("-", 52))
         print(f"  {red('[0]')}  {white('Exit')}")
         print(divider())
@@ -3755,6 +3817,7 @@ def menu():
         elif choice == "8": server_manager_menu()
         elif choice == "9": movie_list_menu()
         elif choice == "t": theme_menu()
+        elif choice == "a": about_menu()
         elif choice == "u":
             if _PENDING_UPDATE:
                 _run_update_flow(_PENDING_UPDATE)
