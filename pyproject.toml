@@ -4,14 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plex-api-manager"
-version = "0.0.25"
-description = "Multi-server Plex CLI with Discord notifications and heartbeat scheduler"
+version = "0.0.39"
+description = "Colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+license = { text = "No License" }
+authors = [
+    { name = "trickdaddy24" },
+]
+keywords = ["plex", "media-server", "cli", "discord"]
 dependencies = [
     "requests",
     "colorama",
 ]
+
+[project.urls]
+Homepage   = "https://github.com/trickdaddy24/plex-api-manager"
+Repository = "https://github.com/trickdaddy24/plex-api-manager"
 
 [project.scripts]
 plex-manager   = "plex_menu:main"
@@ -19,4 +28,8 @@ plex-heartbeat = "system_info_notify:main"
 plex-scheduler = "heartbeat_scheduler:main"
 
 [tool.setuptools]
-py-modules = ["plex_menu", "system_info_notify", "heartbeat_scheduler"]
+py-modules = ["plex_menu", "system_info_notify", "heartbeat_scheduler",
+              "movie_db_scan"]
+
+[tool.setuptools.package-data]
+"*" = ["versions.json"]
