@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Avengers Confidential: Black Widow & Punisher",
+    "type": "movie",
+    "year": 2014,
+    "notes": "radarr",
+    "status": "Completed",
+    "added_at": "2026-02-24",
+    "source": "plex",
+    "tmdb_id": null,
+    "tvdb_id": null,
+    "imdb_id": null
+  },
+  {
+    "title": "Scarface",
+    "type": "movie",
+    "year": 1983,
+    "notes": "radarr",
+    "status": "Completed",
+    "added_at": "2026-02-24",
+    "source": "plex",
+    "tmdb_id": null,
+    "tvdb_id": null,
+    "imdb_id": null
+  },
+  {
+    "title": "Mission: Impossible - Fallout",
+    "type": "movie",
+    "year": 2018,
+    "notes": "radarr",
+    "status": "Completed",
+    "added_at": "2026-02-24",
+    "source": "plex",
+    "tmdb_id": null,
+    "tvdb_id": null,
+    "imdb_id": null
+  },
+  {
+    "title": "Midnight Offerings",
+    "type": "movie",
+    "year": 1981,
+    "notes": "radarr",
+    "status": "Completed",
+    "added_at": "2026-02-24",
+    "source": "plex",
+    "tmdb_id": null,
+    "tvdb_id": null,
+    "imdb_id": null
+  }
+]

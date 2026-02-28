@@ -1,0 +1,52 @@
+[
+  {
+    "version": "0.0.1",
+    "date": "2025-01-01",
+    "notes": "Initial commit"
+  },
+  {
+    "version": "0.0.2",
+    "date": "2026-02-24",
+    "notes": "add python version check"
+  },
+  {
+    "version": "0.0.3",
+    "date": "2026-02-24",
+    "notes": "add server connectivity check"
+  },
+  {
+    "version": "0.0.4",
+    "date": "2026-02-24",
+    "notes": "add logging logs/plex.log"
+  },
+  {
+    "version": "0.0.5",
+    "date": "2026-02-24",
+    "notes": "credential prompting. no hardcoded placeholders"
+  },
+  {
+    "version": "0.0.6",
+    "date": "2026-02-24",
+    "notes": "fixed search endpoint"
+  },
+  {
+    "version": "v0.0.7",
+    "date": "2026-02-24",
+    "notes": "add, change, delete servers"
+  },
+  {
+    "version": "v0.0.8",
+    "date": "2026-02-24",
+    "notes": "add scan, search & scan library"
+  },
+  {
+    "version": "v0.0.9",
+    "date": "2026-02-24",
+    "notes": "add option 4 smart diff"
+  },
+  {
+    "version": "v0.0.10",
+    "date": "2026-02-24",
+    "notes": "add kill stream option in 4"
+  }
+]

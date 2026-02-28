@@ -1,0 +1,21 @@
+# Credentials — never commit these
+plex_creds.json
+plex_servers.json
+discord_creds.json
+
+# Logs
+logs/
+
+# Library cache (can be large)
+library_cache/
+
+# Watchlist exports
+watchlist_exports/
+
+# Old versions
+old/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
