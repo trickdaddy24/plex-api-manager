@@ -123,5 +123,10 @@
     "version": "0.0.25",
     "date": "2026-02-28",
     "notes": "fix pyproject.toml build backend — switch from setuptools.backends.legacy to setuptools.build_meta for broader compatibility"
+  },
+  {
+    "version": "0.0.26",
+    "date": "2026-02-28",
+    "notes": "add Movie Search List menu (option 9) — search TMDB, auto-fill metadata from TMDB/OMDB, save to movie_list.json with ms000001 IDs, send to Radarr API"
   }
 ]

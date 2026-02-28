@@ -53,8 +53,11 @@ LOG_FILE      = LOG_DIR / "plex.log"
 SERVERS_FILE  = BASE_DIR / "plex_servers.json"   # replaces plex_creds.json
 DISCORD_FILE  = BASE_DIR / "discord_creds.json"
 VERSIONS_FILE  = BASE_DIR / "versions.json"
-WATCHLIST_FILE = BASE_DIR / "watchlist.json"
-MAX_SERVERS    = 10
+WATCHLIST_FILE  = BASE_DIR / "watchlist.json"
+MOVIE_LIST_FILE = BASE_DIR / "movie_list.json"
+RADARR_FILE     = BASE_DIR / "radarr_creds.json"
+API_KEYS_FILE   = BASE_DIR / "api_keys.json"
+MAX_SERVERS     = 10
 
 # ─────────────────────────────────────────
 #  LOGGING SETUP
@@ -1988,6 +1991,494 @@ def _export_watchlist(items, target):
 
 
 # ─────────────────────────────────────────
+#  MOVIE LIST — HELPERS
+# ─────────────────────────────────────────
+def load_movie_list():
+    if MOVIE_LIST_FILE.exists():
+        try:
+            with open(MOVIE_LIST_FILE, encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+        except Exception as e:
+            log.warning(f"Could not read movie list: {e}")
+    return []
+
+def save_movie_list(data):
+    with open(MOVIE_LIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def load_api_keys():
+    if API_KEYS_FILE.exists():
+        try:
+            with open(API_KEYS_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_api_keys(data):
+    with open(API_KEYS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def load_radarr_creds():
+    if RADARR_FILE.exists():
+        try:
+            with open(RADARR_FILE, encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+def save_radarr_creds(data):
+    with open(RADARR_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def _next_movie_id(items):
+    """Generate next internal movie ID in ms000001 format."""
+    ids = []
+    for item in items:
+        mid = item.get("id", "")
+        if mid.startswith("ms") and mid[2:].isdigit():
+            ids.append(int(mid[2:]))
+    return f"ms{(max(ids) + 1):06d}" if ids else "ms000001"
+
+def _tmdb_search(query, tmdb_key):
+    """Search TMDB for movies. Returns list of results or None on error."""
+    try:
+        res = requests.get(
+            "https://api.themoviedb.org/3/search/movie",
+            params={"api_key": tmdb_key, "query": query, "language": "en-US"},
+            timeout=10,
+        )
+        res.raise_for_status()
+        return res.json().get("results", [])
+    except Exception as e:
+        log.warning(f"TMDB search error: {e}")
+        return None
+
+def _tmdb_details(tmdb_id, tmdb_key):
+    """Fetch full TMDB movie details including runtime and MPAA rating."""
+    try:
+        res = requests.get(
+            f"https://api.themoviedb.org/3/movie/{tmdb_id}",
+            params={"api_key": tmdb_key, "language": "en-US", "append_to_response": "release_dates"},
+            timeout=10,
+        )
+        res.raise_for_status()
+        data = res.json()
+        # Extract MPAA rating from US theatrical or digital release
+        mpaa = "N/A"
+        for country in data.get("release_dates", {}).get("results", []):
+            if country.get("iso_3166_1") == "US":
+                for rel in country.get("release_dates", []):
+                    cert = rel.get("certification", "").strip()
+                    if cert and rel.get("type") in (3, 4):
+                        mpaa = cert
+                        break
+                break
+        runtime_min = data.get("runtime") or 0
+        return {
+            "title":       data.get("title", "N/A"),
+            "year":        (data.get("release_date") or "")[:4] or "N/A",
+            "description": data.get("overview") or "N/A",
+            "runtime":     f"{runtime_min} min" if runtime_min else "N/A",
+            "mpaa_rating": mpaa,
+            "imdb_id":     data.get("imdb_id") or "N/A",
+            "tmdb_id":     str(tmdb_id),
+        }
+    except Exception as e:
+        log.warning(f"TMDB details error: {e}")
+        return None
+
+def _omdb_ratings(imdb_id, omdb_key):
+    """Fetch IMDB and Rotten Tomatoes ratings from OMDB."""
+    if not imdb_id or imdb_id == "N/A":
+        return {"imdb_rating": "N/A", "rt_rating": "N/A"}
+    try:
+        res = requests.get(
+            "http://www.omdbapi.com/",
+            params={"apikey": omdb_key, "i": imdb_id},
+            timeout=10,
+        )
+        res.raise_for_status()
+        data = res.json()
+        if data.get("Response") == "False":
+            return {"imdb_rating": "N/A", "rt_rating": "N/A"}
+        rt = "N/A"
+        for r in data.get("Ratings", []):
+            if r.get("Source") == "Rotten Tomatoes":
+                rt = r.get("Value", "N/A")
+                break
+        return {"imdb_rating": data.get("imdbRating") or "N/A", "rt_rating": rt}
+    except Exception as e:
+        log.warning(f"OMDB ratings error: {e}")
+        return {"imdb_rating": "N/A", "rt_rating": "N/A"}
+
+def _print_movie_list(items):
+    """Display movie list in a readable format."""
+    if not items:
+        print(yellow("  No movies in your list yet."))
+        return
+    print()
+    for i, m in enumerate(items, 1):
+        title   = m.get("title", "?")
+        year    = m.get("year", "N/A")
+        mid     = m.get("id", "?")
+        imdb    = m.get("imdb_rating", "N/A")
+        rt      = m.get("rt_rating", "N/A")
+        mpaa    = m.get("mpaa_rating", "N/A")
+        runtime = m.get("runtime", "N/A")
+        print(f"  {yellow(f'[{i}]')}  {cyan(mid)}  {white(title)}  {blue(f'({year})')}")
+        print(f"        {yellow('IMDB:')} {imdb}  {green('RT:')} {rt}  {magenta(mpaa)}  {white(runtime)}")
+    print()
+
+# ─────────────────────────────────────────
+#  MOVIE LIST MENU
+# ─────────────────────────────────────────
+def movie_list_menu():
+    while True:
+        items      = load_movie_list()
+        api_keys   = load_api_keys()
+        radarr     = load_radarr_creds()
+        count      = len(items)
+        tmdb_set   = "✅" if api_keys.get("tmdb_key") else "❌"
+        omdb_set   = "✅" if api_keys.get("omdb_key") else "❌"
+        radarr_set = "✅" if radarr.get("url") and radarr.get("api_key") else "❌"
+        print("\n" + divider())
+        print(header("  🎬   MOVIE SEARCH LIST"))
+        print(cyan(f"         {count} movie{'s' if count != 1 else ''} in list  ·  TMDB {tmdb_set}  OMDB {omdb_set}  Radarr {radarr_set}"))
+        print(divider())
+        print(f"  {yellow('[1]')}  {white('View List')}")
+        print(f"  {yellow('[2]')}  {white('Add Movie')}")
+        print(f"  {yellow('[3]')}  {white('Edit Movie')}")
+        print(f"  {yellow('[4]')}  {white('Remove Movie')}")
+        print(divider("-", 52))
+        print(f"  {magenta('[5]')}  {white('Send to Radarr')}")
+        print(f"  {magenta('[6]')}  {white('Radarr Settings')}")
+        print(f"  {magenta('[7]')}  {white('API Keys  (TMDB / OMDB)')}")
+        print(divider("-", 52))
+        print(f"  {red('[0]')}  {white('Back to Main Menu')}")
+        print(divider())
+        choice = input(f"  {cyan('Select an option')}: ").strip()
+
+        if choice == "0":
+            break
+
+        # ── VIEW ────────────────────────────────
+        elif choice == "1":
+            print("\n" + divider("-", 52))
+            print(header("  🎬  YOUR MOVIE LIST"))
+            print(divider("-", 52))
+            _print_movie_list(items)
+
+        # ── ADD MOVIE ───────────────────────────
+        elif choice == "2":
+            tmdb_key = api_keys.get("tmdb_key", "")
+            if not tmdb_key:
+                print(red("  ❌ TMDB API key not set. Go to [7] API Keys first."))
+                continue
+            query = input(f"\n  {cyan('🔍 Search TMDB for movie title')}: ").strip()
+            if not query:
+                print(yellow("  ⚠️  No search term entered."))
+                continue
+            print(cyan("  Searching TMDB..."))
+            results = _tmdb_search(query, tmdb_key)
+            if results is None:
+                print(red("  ❌ TMDB search failed. Check your API key and connection."))
+                continue
+            if not results:
+                print(yellow("  No results found."))
+                continue
+            display = results[:10]
+            print(f"\n{header('  🔍 TMDB RESULTS')}\n" + divider("-", 52))
+            for i, r in enumerate(display, 1):
+                yr = (r.get("release_date") or "")[:4] or "?"
+                print(f"  {yellow(f'[{i}]')}  {white(r.get('title','?'))}  {blue(f'({yr})')}")
+            print(f"  {red('[0]')}  {white('Cancel')}")
+            sel = input(f"\n  {cyan('Select movie')}: ").strip()
+            if sel == "0":
+                continue
+            try:
+                idx = int(sel) - 1
+                if idx < 0 or idx >= len(display):
+                    raise ValueError
+            except ValueError:
+                print(red("  ❌ Invalid selection."))
+                continue
+            picked  = display[idx]
+            tmdb_id = picked.get("id")
+            print(cyan("  Fetching details from TMDB..."))
+            details = _tmdb_details(tmdb_id, tmdb_key)
+            if not details:
+                print(red("  ❌ Could not fetch movie details."))
+                continue
+            omdb_key = api_keys.get("omdb_key", "")
+            ratings  = {"imdb_rating": "N/A", "rt_rating": "N/A"}
+            if omdb_key and details.get("imdb_id") and details["imdb_id"] != "N/A":
+                print(cyan("  Fetching ratings from OMDB..."))
+                ratings = _omdb_ratings(details["imdb_id"], omdb_key)
+            dupes = [m for m in items if str(m.get("tmdb_id", "")) == str(tmdb_id)]
+            if dupes:
+                print(yellow(f"  ⚠️  '{details['title']}' is already in your list ({dupes[0]['id']})."))
+                continue
+            new_id = _next_movie_id(items)
+            print(f"\n{divider('-', 52)}")
+            print(f"  {cyan('ID:')}          {new_id}")
+            print(f"  {cyan('Title:')}       {details['title']} ({details['year']})")
+            print(f"  {cyan('TMDB ID:')}     {tmdb_id}")
+            print(f"  {cyan('IMDB ID:')}     {details['imdb_id']}")
+            print(f"  {cyan('Rating:')}      {details['mpaa_rating']}")
+            print(f"  {cyan('Runtime:')}     {details['runtime']}")
+            print(f"  {cyan('IMDB Score:')}  {ratings['imdb_rating']}")
+            print(f"  {cyan('RT Score:')}    {ratings['rt_rating']}")
+            print(f"  {cyan('Overview:')}    {details['description'][:120]}{'...' if len(details['description']) > 120 else ''}")
+            print(divider("-", 52))
+            confirm = input(f"  {green('Save to movie list? (y/n)')}: ").strip().lower()
+            if confirm != "y":
+                print(yellow("  Cancelled."))
+                continue
+            entry = {
+                "id":          new_id,
+                "title":       details["title"],
+                "year":        details["year"],
+                "tmdb_id":     str(tmdb_id),
+                "imdb_id":     details["imdb_id"],
+                "mpaa_rating": details["mpaa_rating"],
+                "runtime":     details["runtime"],
+                "imdb_rating": ratings["imdb_rating"],
+                "rt_rating":   ratings["rt_rating"],
+                "description": details["description"],
+                "added_at":    datetime.now().strftime("%Y-%m-%d"),
+            }
+            items.append(entry)
+            save_movie_list(items)
+            log.info(f"Movie list add: {entry['title']} ({entry['year']}) [{entry['id']}] tmdb:{tmdb_id}")
+            print(green(f"  ✅ '{entry['title']}' added as {entry['id']}."))
+
+        # ── EDIT ────────────────────────────────
+        elif choice == "3":
+            if not items:
+                print(yellow("  Movie list is empty."))
+                continue
+            _print_movie_list(items)
+            sel = input(f"  {cyan('Enter movie number to edit')}: ").strip()
+            try:
+                idx = int(sel) - 1
+                if idx < 0 or idx >= len(items):
+                    raise ValueError
+            except ValueError:
+                print(red("  ❌ Invalid selection."))
+                continue
+            entry = items[idx]
+            print(f"\n  {white('Editing:')} {yellow(entry['title'])}  {cyan(entry['id'])}")
+            print(f"  {white('Editable fields:')} title · year · mpaa_rating · imdb_rating · rt_rating · runtime · description")
+            field = input(f"  {cyan('Field to edit')}: ").strip().lower()
+            if field not in ("title", "year", "mpaa_rating", "imdb_rating", "rt_rating", "runtime", "description"):
+                print(red("  ❌ Unknown field."))
+                continue
+            cur     = entry.get(field, "N/A")
+            new_val = input(f"  {cyan(f'New value [{cur}]')}: ").strip()
+            if new_val:
+                entry[field] = new_val
+                items[idx]   = entry
+                save_movie_list(items)
+                log.info(f"Movie list edit: {entry['id']} {field} → {new_val}")
+                print(green(f"  ✅ '{entry['title']}' updated."))
+            else:
+                print(yellow("  No change made."))
+
+        # ── REMOVE ──────────────────────────────
+        elif choice == "4":
+            if not items:
+                print(yellow("  Movie list is empty."))
+                continue
+            _print_movie_list(items)
+            sel = input(f"  {cyan('Enter movie number to remove (or 0 to cancel)')}: ").strip()
+            if sel == "0":
+                continue
+            try:
+                idx = int(sel) - 1
+                if idx < 0 or idx >= len(items):
+                    raise ValueError
+            except ValueError:
+                print(red("  ❌ Invalid selection."))
+                continue
+            removed = items.pop(idx)
+            save_movie_list(items)
+            log.info(f"Movie list remove: {removed['title']} [{removed['id']}]")
+            print(yellow(f"  🗑️  '{removed['title']}' removed."))
+
+        # ── SEND TO RADARR ──────────────────────
+        elif choice == "5":
+            if not items:
+                print(yellow("  Movie list is empty."))
+                continue
+            if not radarr.get("url") or not radarr.get("api_key"):
+                print(red("  ❌ Radarr not configured. Go to [6] Radarr Settings first."))
+                continue
+            print(f"\n{header('  📡  SEND TO RADARR')}\n" + divider("-", 52))
+            _print_movie_list(items)
+            print(f"  {yellow('[A]')}  {white('Send ALL movies')}")
+            print(f"  {red('[0]')}  {white('Cancel')}")
+            sel = input(f"  {cyan('Enter movie number or A for all')}: ").strip().upper()
+            if sel == "0":
+                continue
+            if sel == "A":
+                targets = items
+            else:
+                try:
+                    idx = int(sel) - 1
+                    if idx < 0 or idx >= len(items):
+                        raise ValueError
+                    targets = [items[idx]]
+                except ValueError:
+                    print(red("  ❌ Invalid selection."))
+                    continue
+            radarr_url  = radarr["url"].rstrip("/")
+            radarr_key  = radarr["api_key"]
+            qp_id       = radarr.get("quality_profile_id", 1)
+            root_folder = radarr.get("root_folder_path", "/movies")
+            r_headers   = {"X-Api-Key": radarr_key, "Content-Type": "application/json"}
+            sent = 0
+            for movie in targets:
+                if not movie.get("tmdb_id"):
+                    print(yellow(f"  ⚠️  Skipping '{movie['title']}' — no TMDB ID."))
+                    continue
+                payload = {
+                    "title":            movie["title"],
+                    "year":             int(movie.get("year") or 0),
+                    "tmdbId":           int(movie["tmdb_id"]),
+                    "qualityProfileId": int(qp_id),
+                    "rootFolderPath":   root_folder,
+                    "monitored":        True,
+                    "addOptions":       {"searchForMovie": True},
+                }
+                try:
+                    res = requests.post(
+                        f"{radarr_url}/api/v3/movie",
+                        json=payload,
+                        headers=r_headers,
+                        timeout=10,
+                    )
+                    if res.status_code in (200, 201):
+                        print(green(f"  ✅ '{movie['title']}' sent to Radarr."))
+                        log.info(f"Radarr add: {movie['title']} tmdb:{movie['tmdb_id']}")
+                        sent += 1
+                    elif res.status_code == 400 and "already" in res.text.lower():
+                        print(yellow(f"  ⚠️  '{movie['title']}' already exists in Radarr."))
+                    else:
+                        print(red(f"  ❌ '{movie['title']}' failed: HTTP {res.status_code}"))
+                        log.warning(f"Radarr add failed: {movie['title']} — {res.status_code} {res.text[:100]}")
+                except Exception as e:
+                    print(red(f"  ❌ '{movie['title']}' error: {e}"))
+                    log.error(f"Radarr send error: {e}")
+            print(f"\n  {green(f'Sent {sent} of {len(targets)} movie(s) to Radarr.')}")
+
+        # ── RADARR SETTINGS ─────────────────────
+        elif choice == "6":
+            while True:
+                radarr   = load_radarr_creds()
+                cur_url  = radarr.get("url", "")
+                cur_key  = radarr.get("api_key", "")
+                cur_qp   = radarr.get("quality_profile_id", 1)
+                cur_rf   = radarr.get("root_folder_path", "/movies")
+                print(f"\n{header('  ⚙️   RADARR SETTINGS')}\n" + divider("-", 52))
+                print(f"  {white('URL:')}               {cyan(cur_url or 'Not set')}")
+                print(f"  {white('API Key:')}           {cyan(cur_key[:8] + '...' if cur_key else 'Not set')}")
+                print(f"  {white('Quality Profile ID:')} {cyan(str(cur_qp))}")
+                print(f"  {white('Root Folder Path:')}  {cyan(cur_rf)}")
+                print(divider("-", 52))
+                print(f"  {yellow('[1]')}  {white('Set URL and API Key')}")
+                print(f"  {yellow('[2]')}  {white('Set Quality Profile ID')}")
+                print(f"  {yellow('[3]')}  {white('Set Root Folder Path')}")
+                print(f"  {yellow('[4]')}  {white('Test Connection  (shows profiles & folders)')}")
+                print(f"  {red('[0]')}  {white('Back')}")
+                sub = input(f"  {cyan('Select')}: ").strip()
+                if sub == "0":
+                    break
+                elif sub == "1":
+                    new_url = input(f"  {cyan('Radarr URL (e.g. http://192.168.1.x:7878)')}: ").strip()
+                    new_key = input(f"  {cyan('Radarr API Key')}: ").strip()
+                    if new_url:
+                        radarr["url"] = new_url.rstrip("/")
+                    if new_key:
+                        radarr["api_key"] = new_key
+                    save_radarr_creds(radarr)
+                    print(green("  ✅ Radarr credentials saved."))
+                elif sub == "2":
+                    new_qp = input(f"  {cyan(f'Quality Profile ID [{cur_qp}]')}: ").strip()
+                    if new_qp.isdigit():
+                        radarr["quality_profile_id"] = int(new_qp)
+                        save_radarr_creds(radarr)
+                        print(green("  ✅ Quality Profile ID saved."))
+                elif sub == "3":
+                    new_rf = input(f"  {cyan(f'Root Folder Path [{cur_rf}]')}: ").strip()
+                    if new_rf:
+                        radarr["root_folder_path"] = new_rf
+                        save_radarr_creds(radarr)
+                        print(green("  ✅ Root Folder Path saved."))
+                elif sub == "4":
+                    if not cur_url or not cur_key:
+                        print(red("  ❌ URL and API Key must be set first."))
+                        continue
+                    try:
+                        r = requests.get(
+                            f"{cur_url.rstrip('/')}/api/v3/system/status",
+                            headers={"X-Api-Key": cur_key},
+                            timeout=5,
+                        )
+                        r.raise_for_status()
+                        info = r.json()
+                        print(green(f"  ✅ Connected to Radarr v{info.get('version','?')}"))
+                        rp = requests.get(f"{cur_url.rstrip('/')}/api/v3/qualityprofile", headers={"X-Api-Key": cur_key}, timeout=5)
+                        if rp.ok:
+                            print(f"\n  {white('Quality Profiles:')}")
+                            for p in rp.json():
+                                print(f"    {yellow(str(p['id']))}  {white(p['name'])}")
+                        rr = requests.get(f"{cur_url.rstrip('/')}/api/v3/rootfolder", headers={"X-Api-Key": cur_key}, timeout=5)
+                        if rr.ok:
+                            print(f"\n  {white('Root Folders:')}")
+                            for folder in rr.json():
+                                print(f"    {cyan(folder['path'])}")
+                    except Exception as e:
+                        print(red(f"  ❌ Connection failed: {e}"))
+
+        # ── API KEYS ────────────────────────────
+        elif choice == "7":
+            while True:
+                api_keys = load_api_keys()
+                cur_tmdb = api_keys.get("tmdb_key", "")
+                cur_omdb = api_keys.get("omdb_key", "")
+                print(f"\n{header('  🔑  API KEYS')}\n" + divider("-", 52))
+                print(f"  {white('TMDB Key:')}  {cyan(cur_tmdb[:8] + '...' if cur_tmdb else 'Not set')}")
+                print(f"  {white('OMDB Key:')}  {cyan(cur_omdb[:8] + '...' if cur_omdb else 'Not set')}")
+                print(f"  {blue('  TMDB → themoviedb.org  |  OMDB → omdbapi.com  (both free)')}")
+                print(divider("-", 52))
+                print(f"  {yellow('[1]')}  {white('Set TMDB API Key')}")
+                print(f"  {yellow('[2]')}  {white('Set OMDB API Key')}")
+                print(f"  {red('[0]')}  {white('Back')}")
+                sub = input(f"  {cyan('Select')}: ").strip()
+                if sub == "0":
+                    break
+                elif sub == "1":
+                    key = input(f"  {cyan('TMDB API Key')}: ").strip()
+                    if key:
+                        api_keys["tmdb_key"] = key
+                        save_api_keys(api_keys)
+                        print(green("  ✅ TMDB API key saved."))
+                elif sub == "2":
+                    key = input(f"  {cyan('OMDB API Key')}: ").strip()
+                    if key:
+                        api_keys["omdb_key"] = key
+                        save_api_keys(api_keys)
+                        print(green("  ✅ OMDB API key saved."))
+
+        else:
+            print(red("  ⚠️  Invalid option."))
+
+
+# ─────────────────────────────────────────
 #  MAIN MENU
 # ─────────────────────────────────────────
 def menu():
@@ -2004,12 +2495,14 @@ def menu():
         print(cyan( f"         v{app_ver}  ·  {srv_info}"))
         print(blue( f"         {log_id}  {latest['notes']}"))
         print(divider())
-        watchlist_count = len(load_watchlist())
+        watchlist_count  = len(load_watchlist())
+        movie_list_count = len(load_movie_list())
         print(f"  {yellow('[1]')}  {white('List All Libraries')}")
         print(f"  {yellow('[2]')}  {white('Search My Library with Totals')}")
         print(f"  {yellow('[3]')}  {white('Get Recently Added')}")
         print(f"  {yellow('[4]')}  {white('Get Active Playback Sessions')}")
         print(f"  {yellow('[5]')}  {white('Watchlist / Favorites')}  {blue(f'({watchlist_count} item' + ('s' if watchlist_count != 1 else '') + ')')}")
+        print(f"  {yellow('[9]')}  {white('Movie Search List')}  {blue(f'({movie_list_count} movie' + ('s' if movie_list_count != 1 else '') + ')')}")
         print(divider("-", 52))
         print(f"  {magenta('[6]')}  {white('Version Manager')}")
         print(f"  {magenta('[7]')}  {white('Discord Notification Settings')}")
@@ -2029,6 +2522,7 @@ def menu():
         elif choice == "6": version_menu()
         elif choice == "7": discord_settings_menu()
         elif choice == "8": server_manager_menu()
+        elif choice == "9": movie_list_menu()
         else:               print(red("  ⚠️  Invalid option. Please try again."))
 
 # ─────────────────────────────────────────
