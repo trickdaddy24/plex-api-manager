@@ -1,8 +1,12 @@
+<div align="center">
+
 # 🎬 Plex API Manager
 
 A colorized Python CLI for managing multiple Plex Media Server instances via the Plex HTTP API. No web UI, no config files to hand-edit — just run the script and navigate the menu.
 
 **Current version:** `v0.0.39`
+
+</div>
 
 ---
 
@@ -316,3 +320,9 @@ logs/plex.log             # Log file (gitignored)
 | v0.0.3 | Add server connectivity check |
 | v0.0.2 | Add Python version check |
 | v0.0.1 | Initial commit |
+
+---
+
+## License
+
+[MIT](LICENSE) © Minus One Labs
