@@ -2,6 +2,14 @@
 plex_creds.json
 plex_servers.json
 discord_creds.json
+api_keys.json
+radarr_creds.json
+
+# Local config + data (machine-specific / regenerable)
+theme.json
+movie_db.json
+movie_db_progress.json
+movie_list.json
 
 # Logs
 logs/
